@@ -168,6 +168,15 @@ function formatFecha(iso) {
 }
 
 function redirectUrl(qrId) {
-  const base = API_BASE || window.location.origin;
+  let base;
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    base = window.location.origin;
+  } else {
+    base = API_BASE || (typeof window !== 'undefined' ? window.location.origin : 'https://plataforma-qr-backend.onrender.com');
+  }
+  base = String(base).replace(/\/$/, '');
+  if (!base || base === 'https://onrender.com') {
+    base = 'https://plataforma-qr-backend.onrender.com';
+  }
   return `${base}/r/${qrId}`;
 }
