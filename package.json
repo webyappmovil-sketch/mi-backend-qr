@@ -1,0 +1,30 @@
+{
+  "name": "qr-saas",
+  "version": "1.0.0",
+  "description": "Mini-SaaS de códigos QR inteligentes con WhatsApp para negocios en España",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "seed": "node scripts/seed.js",
+    "db:reset": "rm -f database.sqlite && node scripts/seed.js",
+    "test:flow": "node scripts/test-flow.js",
+    "test:all": "npm run db:reset && npm run test:flow"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.15",
+    "sequelize": "^6.37.3",
+    "sqlite3": "^5.1.7",
+    "stripe": "^16.12.0",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
