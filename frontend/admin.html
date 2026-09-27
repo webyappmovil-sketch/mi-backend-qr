@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin – QR SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: { 50:'#f0fdf4',100:'#dcfce7',500:'#22c55e',600:'#16a34a',700:'#15803d' }
+      }}}
+    }
+  </script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .tab-btn.active { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <header class="bg-slate-900 text-white sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold text-sm">Q</div>
+        <span class="font-bold">QR SaaS</span>
+        <span class="text-slate-500 mx-1">|</span>
+        <span class="text-sm text-slate-300">Super Admin</span>
+      </div>
+      <button onclick="Auth.logout()" class="text-sm text-slate-400 hover:text-white">Salir</button>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div class="grid sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-white rounded-2xl border border-slate-200 p-5">
+        <p class="text-sm text-slate-500">MRR</p>
+        <p class="text-3xl font-extrabold mt-1" id="m-mrr">—</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-5">
+        <p class="text-sm text-slate-500">Negocios activos</p>
+        <p class="text-3xl font-extrabold mt-1" id="m-activos">—</p>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-5">
+        <p class="text-sm text-slate-500">Pedidos impresión pendientes</p>
+        <p class="text-3xl font-extrabold text-amber-600 mt-1" id="m-pedidos">—</p>
+      </div>
+    </div>
+
+    <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold" data-tab="negocios" onclick="cambiarTab('negocios')">🏢 Negocios</button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="pedidos" onclick="cambiarTab('pedidos')">🖨️ Pedidos de Impresión</button>
+    </div>
+
+    <section id="tab-negocios" class="tab-content">
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 border-b border-slate-100">
+          <h2 class="font-bold text-lg">Suscripciones y control</h2>
+          <p class="text-sm text-slate-500">Activar o suspender cuentas manualmente</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-left">
+              <tr>
+                <th class="px-5 py-3 font-medium">Negocio</th>
+                <th class="px-5 py-3 font-medium">Email</th>
+                <th class="px-5 py-3 font-medium">Plan</th>
+                <th class="px-5 py-3 font-medium">Estado</th>
+                <th class="px-5 py-3 font-medium">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-negocios" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-pedidos" class="tab-content hidden">
+      <div class="mb-4">
+        <h2 class="font-bold text-lg">Pedidos de impresión pendientes</h2>
+        <p class="text-sm text-slate-500">Pago recibido · Enviar a imprenta</p>
+      </div>
+      <div id="grid-pedidos" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      <p id="pedidos-vacio" class="hidden text-center text-slate-400 py-12 text-sm">No hay pedidos pendientes.</p>
+    </section>
+  </main>
+
+  <div id="modal-qr" class="fixed inset-0 bg-black/40 z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl relative text-center">
+      <button onclick="cerrarModalQR()" class="absolute top-4 right-4 text-slate-400 text-xl">&times;</button>
+      <h3 class="font-bold text-lg mb-4">QR para imprenta</h3>
+      <canvas id="admin-qr-canvas" class="mx-auto"></canvas>
+      <p id="admin-qr-info" class="text-xs text-slate-400 mt-3"></p>
+      <button onclick="descargarQRAdmin()" class="mt-4 w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl text-sm">
+        Descargar PNG HD
+      </button>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    Auth.requireAuth('admin');
+    let currentQrId = null;
+
+    function cambiarTab(id) {
+      document.querySelectorAll('.tab-content').forEach(e => e.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.remove('hidden');
+      document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+      if (id === 'pedidos') cargarPedidos();
+    }
+
+    async function cargarMetricas() {
+      try {
+        const m = await API.adminMetricas();
+        document.getElementById('m-mrr').textContent = m.mrr.toFixed(2) + ' €';
+        document.getElementById('m-activos').textContent = m.activos;
+        document.getElementById('m-pedidos').textContent = m.pedidos_pendientes;
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function cargarNegocios() {
+      try {
+        const data = await API.adminNegocios();
+        const badge = {
+          Activo: 'bg-green-100 text-green-800',
+          Suspendido: 'bg-red-100 text-red-800',
+          Pendiente_Impresion: 'bg-amber-100 text-amber-800'
+        };
+        const label = {
+          Activo: 'Activo',
+          Suspendido: 'Suspendido',
+          Pendiente_Impresion: 'Pendiente impresión'
+        };
+        document.getElementById('tabla-negocios').innerHTML = (data.negocios || []).map(n => `
+          <tr class="hover:bg-slate-50">
+            <td class="px-5 py-3 font-medium">${n.nombre_empresa}</td>
+            <td class="px-5 py-3 text-slate-600">${n.email}</td>
+            <td class="px-5 py-3"><span class="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">${n.plan_actual}</span></td>
+            <td class="px-5 py-3"><span class="text-xs font-semibold px-2 py-0.5 rounded ${badge[n.estado_suscripcion] || ''}">${label[n.estado_suscripcion] || n.estado_suscripcion}</span></td>
+            <td class="px-5 py-3">
+              <div class="flex gap-2">
+                ${n.estado_suscripcion !== 'Activo' ? `<button onclick="cambiarEstado('${n.id}','Activo')" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Activar</button>` : ''}
+                ${n.estado_suscripcion !== 'Suspendido' ? `<button onclick="cambiarEstado('${n.id}','Suspendido')" class="text-xs font-semibold text-red-500 hover:text-red-600">Suspender</button>` : ''}
+              </div>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Sin negocios</td></tr>';
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function cambiarEstado(id, estado) {
+      if (!confirm(`¿Cambiar estado a ${estado}?`)) return;
+      try {
+        await API.adminCambiarEstado(id, estado);
+        toast('Estado actualizado', 'success');
+        cargarNegocios();
+        cargarMetricas();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function cargarPedidos() {
+      try {
+        const data = await API.adminPedidos('Pendiente');
+        const pedidos = data.pedidos || [];
+        const grid = document.getElementById('grid-pedidos');
+        const vacio = document.getElementById('pedidos-vacio');
+
+        if (!pedidos.length) {
+          grid.innerHTML = '';
+          vacio.classList.remove('hidden');
+          return;
+        }
+        vacio.classList.add('hidden');
+        grid.innerHTML = pedidos.map(p => {
+          const nombre = p.negocio?.nombre_empresa || '—';
+          const qrId = p.qr_id || '';
+          return `
+            <div class="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col">
+              <div class="flex items-start justify-between mb-3">
+                <h3 class="font-bold text-sm">${nombre}</h3>
+                <span class="text-xs font-semibold ${p.tipo_material === 'Vinilo' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'} px-2 py-0.5 rounded">
+                  ${p.tipo_material} · ${p.tipo_material === 'Vinilo' ? '20 €' : '10 €'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 mb-1"><strong>Contacto:</strong> ${p.nombre_contacto || '—'} · ${p.telefono_contacto || '—'}</p>
+              <p class="text-xs text-slate-600 bg-slate-50 rounded-lg p-2.5 mb-4 whitespace-pre-line">${p.direccion_envio_completa || '—'}</p>
+              <div class="mt-auto flex gap-2">
+                <button onclick="mostrarQRImprenta('${qrId}','${nombre.replace(/'/g, "\\'")}')" class="flex-1 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-lg" ${!qrId ? 'disabled' : ''}>
+                  Descargar QR
+                </button>
+                <button onclick="marcarEnviado('${p.id}')" class="flex-1 text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 py-2 rounded-lg">
+                  Marcar enviado
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function marcarEnviado(id) {
+      if (!confirm('¿Marcar como Enviado?')) return;
+      try {
+        await API.adminPedidoEstado(id, 'Enviado');
+        toast('Pedido marcado como enviado', 'success');
+        cargarPedidos();
+        cargarMetricas();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function mostrarQRImprenta(qrId, nombre) {
+      if (!qrId) return toast('Sin QR asociado', 'error');
+      currentQrId = qrId;
+      const url = redirectUrl(qrId);
+      document.getElementById('admin-qr-info').textContent = nombre + ' · ' + url;
+      QRCode.toCanvas(document.getElementById('admin-qr-canvas'), url, {
+        width: 220, margin: 2, color: { dark: '#0f172a', light: '#ffffff' }
+      });
+      document.getElementById('modal-qr').classList.remove('hidden');
+      document.getElementById('modal-qr').classList.add('flex');
+    }
+
+    function cerrarModalQR() {
+      document.getElementById('modal-qr').classList.add('hidden');
+      document.getElementById('modal-qr').classList.remove('flex');
+    }
+
+    function descargarQRAdmin() {
+      const canvas = document.getElementById('admin-qr-canvas');
+      const a = document.createElement('a');
+      a.download = `qr-imprenta-${currentQrId}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    }
+
+    cargarMetricas();
+    cargarNegocios();
+  </script>
+</body>
+</html>

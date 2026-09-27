@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Códigos QR para negocios en España que abren un menú inteligente en WhatsApp. Escaneos ilimitados. Plan gratis para siempre.">
+  <title>QR SaaS – El QR de tu negocio que trabaja en WhatsApp y nunca caduca</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0',
+              500: '#22c55e', 600: '#16a34a', 700: '#15803d',
+              800: '#166534', 900: '#14532d'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .faq-answer.open { max-height: 220px; }
+    .faq-icon { transition: transform 0.2s ease; }
+    .faq-item.open .faq-icon { transform: rotate(180deg); }
+  </style>
+</head>
+<body class="bg-white text-slate-800 antialiased">
+
+  <nav class="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-lg">Q</div>
+        <span class="font-bold text-lg text-slate-900">QR SaaS</span>
+      </a>
+      <div class="hidden sm:flex items-center gap-6 text-sm font-medium text-slate-600">
+        <a href="#por-que" class="hover:text-brand-700">Por qué nosotros</a>
+        <a href="#planes" class="hover:text-brand-700">Planes</a>
+        <a href="#faq" class="hover:text-brand-700">FAQ</a>
+      </div>
+      <div class="flex items-center gap-2 sm:gap-3">
+        <a href="login.html" class="text-sm font-medium text-slate-600 hover:text-brand-700 px-2 py-1.5">Entrar</a>
+        <a href="login.html" class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">Crear QR gratis</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="relative pt-28 pb-16 md:pt-36 md:pb-24 overflow-hidden">
+    <div class="absolute inset-0 -z-10">
+      <div class="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-100/60 rounded-full blur-3xl -translate-y-1/3 translate-x-1/4"></div>
+      <div class="absolute bottom-0 left-0 w-[400px] h-[400px] bg-slate-100 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4"></div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 text-center">
+      <span class="inline-flex items-center gap-1.5 bg-brand-50 text-brand-800 text-xs font-semibold px-3 py-1.5 rounded-full border border-brand-100 mb-6">
+        <span class="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
+        Hecho para bares, restaurantes y comercios en España
+      </span>
+      <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold text-slate-900 leading-[1.15] max-w-4xl mx-auto">
+        El único Código QR para tu negocio que
+        <span class="text-brand-600">trabaja en tu WhatsApp</span>
+        y nunca caduca
+      </h1>
+      <p class="mt-6 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+        Crea menús, comparte tu Wi-Fi o gestiona citas de forma automática.
+        Captura los datos de tus clientes desde el primer escaneo.
+        <strong class="text-slate-800">Empieza hoy mismo sin pagar cuotas mensuales.</strong>
+      </p>
+      <div class="mt-10 flex flex-col sm:flex-row gap-3 justify-center items-center">
+        <a href="VISUAL-login.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-bold text-base px-8 py-4 rounded-xl shadow-lg shadow-brand-600/25 transition">
+          Crear mi QR Gratis Ahora
+        </a>
+        <a href="#planes" class="w-full sm:w-auto inline-flex items-center justify-center text-slate-700 font-semibold text-base px-8 py-4 rounded-xl border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition">
+          Ver planes y precios
+        </a>
+      </div>
+      <p class="mt-5 text-xs text-slate-400">Sin permanencia · Escaneos ilimitados · Activación en minutos</p>
+    </div>
+  </section>
+
+  <!-- POR QUÉ -->
+  <section id="por-que" class="py-16 md:py-24 bg-slate-50">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="text-center mb-12">
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900">¿Por qué nosotros?</h2>
+        <p class="mt-3 text-slate-600 max-w-xl mx-auto">No somos otro generador de QR genérico. Estamos pensados para que tu negocio cobre, atienda y fidelice desde WhatsApp.</p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6 md:gap-8">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+          <div class="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center text-2xl mb-5">🔓</div>
+          <h3 class="font-bold text-lg text-slate-900 mb-3">Sin sorpresas ni bloqueos</h3>
+          <p class="text-sm text-slate-600 leading-relaxed">
+            A diferencia de los generadores «gratuitos» de internet que te bloquean el QR a las dos semanas o al superar los 100 escaneos para obligarte a pagar suscripciones abusivas en dólares, nuestra plataforma te garantiza
+            <strong class="text-slate-800">escaneos 100 % ilimitados desde el primer día</strong>.
+          </p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+          <div class="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center text-2xl mb-5">💬</div>
+          <h3 class="font-bold text-lg text-slate-900 mb-3">Menú de opciones interactivo</h3>
+          <p class="text-sm text-slate-600 leading-relaxed">
+            No generamos un enlace simple. Tu código QR abre un
+            <strong class="text-slate-800">menú inteligente dentro del WhatsApp</strong>
+            del cliente (1. Ver Carta, 2. Clave Wi-Fi, 3. Ofertas). El cliente elige con un número y el sistema responde solo.
+          </p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+          <div class="w-12 h-12 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center text-2xl mb-5">📒</div>
+          <h3 class="font-bold text-lg text-slate-900 mb-3">Tu propia base de datos</h3>
+          <p class="text-sm text-slate-600 leading-relaxed">
+            Cada vez que un cliente interactúa con el código QR, tu sistema guarda automáticamente su
+            <strong class="text-slate-800">número de teléfono y nombre de perfil</strong>
+            en tu panel para que puedas lanzar campañas de fidelización.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLANES -->
+  <section id="planes" class="py-16 md:py-24">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="text-center mb-12">
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900">Planes claros, sin letra pequeña</h2>
+        <p class="mt-3 text-slate-600 max-w-xl mx-auto">Empieza gratis. Escala cuando tu negocio lo necesite. Precios en euros, para España.</p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6 lg:gap-8 items-stretch">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 flex flex-col shadow-sm">
+          <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Starter</p>
+          <p class="mt-2 text-4xl font-extrabold text-slate-900">0,00 €<span class="text-base font-normal text-slate-500">/mes</span></p>
+          <p class="mt-1 text-sm font-medium text-brand-700">Suscripción gratis para siempre</p>
+          <ul class="mt-6 space-y-3 text-sm text-slate-600 flex-1">
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> 1 QR estático único</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Escaneos ilimitados</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Menú de opciones inicial</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Redirección a WhatsApp</li>
+          </ul>
+          <p class="mt-5 text-xs text-slate-500 bg-slate-50 rounded-lg p-3 leading-relaxed">
+            * Requiere activación física mediante pack de impresión profesional
+            (<strong>Papel 10 €</strong> / <strong>Vinilo 20 €</strong>) por única vez.
+          </p>
+          <a href="login.html" class="mt-6 block text-center w-full border-2 border-brand-600 text-brand-700 font-semibold py-3 rounded-xl hover:bg-brand-50 transition">Empezar Gratis</a>
+        </div>
+        <div class="relative bg-white rounded-2xl border-2 border-brand-500 p-6 md:p-8 flex flex-col shadow-lg shadow-brand-500/10">
+          <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-600 text-white text-xs font-bold px-3 py-1 rounded-full">El más recomendado</span>
+          <p class="text-sm font-semibold text-brand-700 uppercase tracking-wide">Pro</p>
+          <p class="mt-2 text-4xl font-extrabold text-slate-900">19,99 €<span class="text-base font-normal text-slate-500">/mes</span></p>
+          <p class="mt-1 text-sm text-slate-500">Para negocios que crecen</p>
+          <ul class="mt-6 space-y-3 text-sm text-slate-600 flex-1">
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Hasta 5 QR dinámicos</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Modificables en tiempo real (sin reimprimir)</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Base de datos automática de clientes</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Estadísticas y analíticas de escaneos</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Bot de respuestas en WhatsApp</li>
+          </ul>
+          <a href="login.html" class="mt-6 block text-center w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl transition">Probar Plan Pro</a>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 flex flex-col shadow-sm">
+          <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Business</p>
+          <p class="mt-2 text-4xl font-extrabold text-slate-900">29,99 €<span class="text-base font-normal text-slate-500">/mes</span></p>
+          <p class="mt-1 text-sm text-slate-500">Multi-local y escala</p>
+          <ul class="mt-6 space-y-3 text-sm text-slate-600 flex-1">
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Hasta 50 QR dinámicos</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Multi-local / varias sedes</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Exportación masiva a Excel</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Todo lo incluido en Pro</li>
+            <li class="flex gap-2"><span class="text-brand-600 font-bold">✓</span> Soporte prioritario</li>
+          </ul>
+          <a href="login.html" class="mt-6 block text-center w-full border-2 border-slate-300 text-slate-700 font-semibold py-3 rounded-xl hover:border-brand-500 hover:text-brand-700 transition">Probar Plan Business</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="py-16 md:py-24 bg-slate-50">
+    <div class="max-w-3xl mx-auto px-4">
+      <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 text-center mb-10">Preguntas frecuentes</h2>
+      <div class="space-y-3">
+        <div class="faq-item bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <button type="button" onclick="toggleFaq(this)" class="w-full flex items-center justify-between gap-4 px-5 py-4 text-left font-semibold text-slate-900 text-sm sm:text-base">
+            ¿Los precios incluyen IVA?
+            <svg class="faq-icon w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5 text-sm text-slate-600">
+            <p class="pb-4">Los importes mostrados son orientativos. En la factura se aplicará el IVA vigente en España (actualmente 21 %) cuando corresponda según tu situación fiscal y la de la plataforma.</p>
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <button type="button" onclick="toggleFaq(this)" class="w-full flex items-center justify-between gap-4 px-5 py-4 text-left font-semibold text-slate-900 text-sm sm:text-base">
+            ¿Cómo se envían los vinilos o el papel con el QR?
+            <svg class="faq-icon w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5 text-sm text-slate-600">
+            <p class="pb-4">Tras pagar el pack de impresión (Papel 10 € o Vinilo 20 €), nos llega tu dirección de envío en España. Preparamos el material e imprimimos tu QR. El envío se realiza a la dirección que indiques; los plazos típicos son de unos días laborables.</p>
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <button type="button" onclick="toggleFaq(this)" class="w-full flex items-center justify-between gap-4 px-5 py-4 text-left font-semibold text-slate-900 text-sm sm:text-base">
+            ¿Hay permanencia o compromiso de permanencia?
+            <svg class="faq-icon w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5 text-sm text-slate-600">
+            <p class="pb-4"><strong>Sin permanencia.</strong> Puedes cancelar el plan Pro o Business cuando quieras. El Plan Starter es gratis para siempre; solo pagas una vez el pack de impresión física si lo solicitas.</p>
+          </div>
+        </div>
+        <div class="faq-item bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <button type="button" onclick="toggleFaq(this)" class="w-full flex items-center justify-between gap-4 px-5 py-4 text-left font-semibold text-slate-900 text-sm sm:text-base">
+            ¿Necesito conocimientos técnicos?
+            <svg class="faq-icon w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5 text-sm text-slate-600">
+            <p class="pb-4">No. Te registras, configuras el mensaje y las opciones (carta, Wi-Fi, ofertas…) y generas el QR. Tus clientes solo tienen que escanear y escribir un número en WhatsApp.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="py-16 md:py-20 bg-slate-900 text-white">
+    <div class="max-w-3xl mx-auto px-4 text-center">
+      <h2 class="text-2xl sm:text-3xl font-extrabold">¿Listo para que tu QR trabaje por ti?</h2>
+      <p class="mt-3 text-slate-300 text-sm sm:text-base">Crea tu cuenta en minutos. Plan Starter gratis. Sin permanencia.</p>
+      <a href="VISUAL-login.html" class="mt-8 inline-flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white font-bold px-8 py-4 rounded-xl shadow-lg transition">Crear mi QR Gratis Ahora</a>
+    </div>
+  </section>
+
+  <footer class="bg-slate-950 text-slate-400 py-12">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="flex flex-col md:flex-row md:items-start justify-between gap-8">
+        <div>
+          <div class="flex items-center gap-2 text-white mb-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center font-bold text-sm">Q</div>
+            <span class="font-bold">QR SaaS</span>
+          </div>
+          <p class="text-sm max-w-xs leading-relaxed">Software de códigos QR inteligentes para negocios en España.</p>
+        </div>
+        <div class="flex flex-wrap gap-6 text-sm">
+          <a href="#planes" class="hover:text-white">Planes</a>
+          <a href="#faq" class="hover:text-white">FAQ</a>
+          <a href="VISUAL-login.html" class="hover:text-white">Acceso</a>
+        </div>
+      </div>
+      <div class="mt-10 pt-8 border-t border-slate-800 text-xs leading-relaxed space-y-3">
+        <p>
+          Este sitio web es un software independiente y
+          <strong class="text-slate-300">no está asociado, afiliado ni respaldado por WhatsApp Inc. ni por Meta Platforms Inc.</strong>
+          WhatsApp es una marca registrada de sus respectivos titulares.
+        </p>
+        <p>© <span id="year"></span> QR SaaS. Todos los derechos reservados. España.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    function toggleFaq(btn) {
+      const item = btn.closest('.faq-item');
+      const answer = item.querySelector('.faq-answer');
+      const wasOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item').forEach(el => {
+        el.classList.remove('open');
+        el.querySelector('.faq-answer').classList.remove('open');
+      });
+      if (!wasOpen) {
+        item.classList.add('open');
+        answer.classList.add('open');
+      }
+    }
+  </script>
+</body>
+</html>

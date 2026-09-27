@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel del Negocio – QR SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#f0fdf4',100:'#dcfce7',500:'#22c55e',600:'#16a34a',700:'#15803d',800:'#166534' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .tab-btn.active { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+    .opt-row { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm">Q</div>
+        <span class="font-bold text-slate-900 hidden sm:inline">QR SaaS</span>
+        <span class="text-slate-300 mx-1">|</span>
+        <span id="nombre-negocio" class="text-sm font-medium text-slate-600 truncate max-w-[160px]">Cargando…</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="badge-plan" class="text-xs font-semibold bg-brand-100 text-brand-800 px-2.5 py-1 rounded-full">Pro</span>
+        <button onclick="Auth.logout()" class="text-sm text-slate-500 hover:text-red-600 transition">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold transition" data-tab="qr" onclick="cambiarTab('qr')">
+        📱 Configurar QR
+      </button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500 hover:text-slate-700 transition" data-tab="clientes" onclick="cambiarTab('clientes')">
+        👥 Clientes
+      </button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500 hover:text-slate-700 transition" data-tab="metricas" onclick="cambiarTab('metricas')">
+        📊 Métricas
+      </button>
+    </div>
+
+    <!-- ════════ TAB 1: CONFIGURAR QR ════════ -->
+    <section id="tab-qr" class="tab-content">
+      <div class="grid lg:grid-cols-2 gap-6">
+
+        <!-- Formulario -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6">
+          <h2 class="font-bold text-lg mb-4">Configuración del QR</h2>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">WhatsApp comercial (sin +)</label>
+              <input type="text" id="wa-telefono" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="34600111222">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-1">Mensaje de bienvenida</label>
+              <textarea id="wa-mensaje" rows="3" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="¡Hola! 👋 Bienvenido a mi negocio. Elige una opción:"></textarea>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-medium">Opciones del menú</label>
+                <button type="button" onclick="anadirOpcion()" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Añadir opción</button>
+              </div>
+              <div id="opciones-container" class="space-y-3">
+                <!-- Opciones dinámicas -->
+              </div>
+            </div>
+
+            <button onclick="guardarConfigQR()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl transition">
+              Guardar y generar QR
+            </button>
+          </div>
+        </div>
+
+        <!-- Preview QR -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6 flex flex-col items-center">
+          <h2 class="font-bold text-lg mb-4 self-start">Tu Código QR</h2>
+          <div id="qr-canvas-wrap" class="bg-slate-50 rounded-xl p-6 flex items-center justify-center min-h-[260px] w-full">
+            <canvas id="qr-canvas"></canvas>
+            <p id="qr-placeholder" class="text-slate-400 text-sm text-center">Configura y guarda para generar el QR</p>
+          </div>
+          <p id="qr-url" class="text-xs text-slate-400 mt-3 break-all text-center"></p>
+          <button id="btn-descargar-qr" onclick="descargarQR()" class="mt-4 hidden w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-xl transition text-sm">
+            Descargar QR HD
+          </button>
+          <p class="text-xs text-slate-400 mt-3 text-center">
+            Plan Starter: la descarga digital está deshabilitada.<br>Se genera solo para impresión.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════ TAB 2: CLIENTES ════════ -->
+    <section id="tab-clientes" class="tab-content hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
+          <h2 class="font-bold text-lg">Base de datos de clientes</h2>
+          <button onclick="exportarCSV()" class="text-sm font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 px-4 py-2 rounded-lg transition">
+            📥 Exportar CSV
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-left">
+              <tr>
+                <th class="px-5 py-3 font-medium">Nombre</th>
+                <th class="px-5 py-3 font-medium">Teléfono</th>
+                <th class="px-5 py-3 font-medium">Última interacción</th>
+                <th class="px-5 py-3 font-medium">Veces</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-clientes" class="divide-y divide-slate-100">
+              <!-- JS -->
+            </tbody>
+          </table>
+        </div>
+        <p id="clientes-vacio" class="hidden p-8 text-center text-slate-400 text-sm">Aún no hay clientes capturados.</p>
+      </div>
+    </section>
+
+    <!-- ════════ TAB 3: MÉTRICAS ════════ -->
+    <section id="tab-metricas" class="tab-content hidden">
+      <div class="grid sm:grid-cols-2 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">Total de escaneos</p>
+          <p id="metric-escaneos" class="text-3xl font-extrabold text-slate-900 mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">Clientes capturados</p>
+          <p id="metric-clientes" class="text-3xl font-extrabold text-slate-900 mt-1">0</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 p-5">
+        <h3 class="font-bold mb-4">Escaneos por día (últimos 7 días)</h3>
+        <canvas id="chart-escaneos" height="200"></canvas>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="js/app.js"></script>
+  <script>
+    // ── Auth guard ──
+    const user = Auth.requireAuth('negocio');
+    document.getElementById('nombre-negocio').textContent = user.nombre || user.email;
+    document.getElementById('badge-plan').textContent = user.plan || 'Starter';
+
+    // Prefill
+    document.getElementById('wa-telefono').value = user.telefono || '';
+    document.getElementById('wa-mensaje').value = '¡Hola! 👋 Bienvenido a *' + (user.nombre || 'mi negocio') + '*\n\nElige una opción:';
+
+    // ── Tabs ──
+    function cambiarTab(id) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.remove('hidden');
+      document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+      if (id === 'clientes') cargarClientes();
+      if (id === 'metricas') cargarMetricas();
+    }
+
+    // ── Opciones dinámicas ──
+    let opciones = [
+      { texto: 'Ver Carta', valor: 'https://ejemplo.com/carta.pdf' },
+      { texto: 'Hacer Reserva', valor: 'https://ejemplo.com/reservas' },
+      { texto: 'Hablar con nosotros', valor: 'humano' }
+    ];
+
+    function renderOpciones() {
+      const cont = document.getElementById('opciones-container');
+      cont.innerHTML = opciones.map((op, i) => `
+        <div class="opt-row flex gap-2 items-start">
+          <span class="mt-2.5 text-xs font-bold text-brand-600 w-5">${i + 1}.</span>
+          <input type="text" value="${op.texto}" onchange="opciones[${i}].texto=this.value"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Texto de la opción">
+          <input type="text" value="${op.valor}" onchange="opciones[${i}].valor=this.value"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="URL, WiFi o 'humano'">
+          <button onclick="eliminarOpcion(${i})" class="mt-1.5 text-slate-400 hover:text-red-500 text-lg leading-none">&times;</button>
+        </div>
+      `).join('');
+    }
+
+    function anadirOpcion() {
+      if (opciones.length >= 9) return alert('Máximo 9 opciones');
+      opciones.push({ texto: '', valor: '' });
+      renderOpciones();
+    }
+
+    function eliminarOpcion(i) {
+      opciones.splice(i, 1);
+      renderOpciones();
+    }
+
+    renderOpciones();
+
+    // ── Guardar y generar QR ──
+    function guardarConfigQR() {
+      const telefono = document.getElementById('wa-telefono').value.trim().replace(/\D/g, '');
+      const mensajeBase = document.getElementById('wa-mensaje').value.trim();
+
+      if (!telefono || telefono.length < 9) {
+        return alert('Introduce un número de WhatsApp válido (solo dígitos, con prefijo país)');
+      }
+
+      // Construir mensaje completo con opciones
+      let mensajeCompleto = mensajeBase + '\n';
+      opciones.forEach((op, i) => {
+        if (op.texto) mensajeCompleto += `\n${i + 1}️⃣ ${op.texto}`;
+      });
+
+      const mensajeEncoded = encodeURIComponent(mensajeCompleto);
+      const waUrl = `https://wa.me/${telefono}?text=${mensajeEncoded}`;
+
+      // En producción esto sería la URL de redirección: APP_BASE_URL/r/{qrId}
+      // Para la demo usamos directamente wa.me o una URL de ejemplo
+      const qrRedirectUrl = `https://qr.tudominio.com/r/demo-${user.negocioId}`;
+
+      // Generar QR
+      const canvas = document.getElementById('qr-canvas');
+      document.getElementById('qr-placeholder').classList.add('hidden');
+      canvas.classList.remove('hidden');
+
+      QRCode.toCanvas(canvas, qrRedirectUrl, {
+        width: 240,
+        margin: 2,
+        color: { dark: '#0f172a', light: '#ffffff' }
+      }, (err) => {
+        if (err) console.error(err);
+        document.getElementById('btn-descargar-qr').classList.remove('hidden');
+        document.getElementById('qr-url').textContent = qrRedirectUrl;
+
+        // Plan Starter: bloquear descarga digital
+        if (user.plan === 'Starter') {
+          document.getElementById('btn-descargar-qr').classList.add('opacity-50', 'pointer-events-none');
+          document.getElementById('btn-descargar-qr').title = 'Disponible tras pago de impresión';
+        }
+      });
+
+      // Guardar en localStorage (demo). En producción → POST al backend
+      const config = {
+        telefono,
+        mensajeEncoded,
+        mapeo: {},
+        opciones
+      };
+      opciones.forEach((op, i) => {
+        if (op.valor) config.mapeo[String(i + 1)] = op.valor;
+      });
+      localStorage.setItem('qr_config_' + user.negocioId, JSON.stringify(config));
+
+      // Actualizar teléfono del usuario
+      user.telefono = telefono;
+      Auth.login(user);
+
+      alert('✅ Configuración guardada y QR generado');
+    }
+
+    function descargarQR() {
+      if (user.plan === 'Starter') {
+        return alert('En el Plan Starter la descarga digital está deshabilitada.\nPaga la impresión física para activar tu QR.');
+      }
+      const canvas = document.getElementById('qr-canvas');
+      const link = document.createElement('a');
+      link.download = `qr-${user.nombre || 'negocio'}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // ── Clientes (demo data) ──
+    const CLIENTES_DEMO = [
+      { nombre: 'María García', telefono: '34611122333', fecha: '2026-09-24 14:32', veces: 3 },
+      { nombre: 'Carlos Ruiz', telefono: '34622233444', fecha: '2026-09-23 19:05', veces: 1 },
+      { nombre: 'Ana López', telefono: '34633344555', fecha: '2026-09-22 11:18', veces: 5 },
+      { nombre: 'Pedro Sánchez', telefono: '34644455666', fecha: '2026-09-21 20:47', veces: 2 }
+    ];
+
+    function cargarClientes() {
+      const tbody = document.getElementById('tabla-clientes');
+      const vacio = document.getElementById('clientes-vacio');
+
+      if (CLIENTES_DEMO.length === 0) {
+        tbody.innerHTML = '';
+        vacio.classList.remove('hidden');
+        return;
+      }
+      vacio.classList.add('hidden');
+      tbody.innerHTML = CLIENTES_DEMO.map(c => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-5 py-3 font-medium">${c.nombre}</td>
+          <td class="px-5 py-3 text-slate-600">${c.telefono}</td>
+          <td class="px-5 py-3 text-slate-500">${c.fecha}</td>
+          <td class="px-5 py-3">${c.veces}</td>
+        </tr>
+      `).join('');
+    }
+
+    function exportarCSV() {
+      const header = 'Nombre,Telefono,Ultima Interaccion,Veces\n';
+      const rows = CLIENTES_DEMO.map(c =>
+        `"${c.nombre}","${c.telefono}","${c.fecha}",${c.veces}`
+      ).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `clientes-${user.nombre || 'negocio'}.csv`;
+      link.click();
+    }
+
+    // ── Métricas ──
+    let chartInstance = null;
+
+    function cargarMetricas() {
+      document.getElementById('metric-escaneos').textContent = '128';
+      document.getElementById('metric-clientes').textContent = CLIENTES_DEMO.length;
+
+      const ctx = document.getElementById('chart-escaneos');
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+          datasets: [{
+            label: 'Escaneos',
+            data: [12, 19, 8, 15, 22, 31, 21],
+            backgroundColor: '#22c55e',
+            borderRadius: 6,
+            barThickness: 28
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
