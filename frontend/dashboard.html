@@ -338,8 +338,7 @@
 
   const telefonoLimpio = (document.getElementById('qr-whatsapp')?.value || '').trim();
 const mensajeLimpio = encodeURIComponent(document.getElementById('qr-message')?.value || '');
-const url = ('https://onrender.com' + qrId).trim();
-
+const url = redirectUrl(qrId);
   const contenedor = document.getElementById('qr-placeholder');
   if (!contenedor) return;
 
