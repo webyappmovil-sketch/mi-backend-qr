@@ -114,6 +114,19 @@ router.put('/config-qr', async (req, res) => {
   }
 });
 
+/** Fecha/hora en Europe/Madrid (España) a partir de un Date o string ISO */
+function madridParts(date) {
+  const s = new Date(date).toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' });
+  // "2026-10-05 08:15:00"
+  const [fecha, time] = s.split(' ');
+  const hora = parseInt((time || '00').slice(0, 2), 10);
+  return { fecha, hora };
+}
+
+function madridHoyFecha() {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 10);
+}
+
 /**
  * GET /api/negocio/contactos  (alias /api/contactos)
  */
@@ -131,13 +144,46 @@ router.get('/contactos', async (req, res) => {
 });
 
 /**
+ * POST /api/negocio/contactos/prueba
+ * Crea 1–3 clientes de demostración para ver la pestaña Clientes.
+ */
+router.post('/contactos/prueba', async (req, res) => {
+  try {
+    const muestras = [
+      { telefono_cliente: '34600111222', nombre_perfil_whatsapp: 'Cliente Demo 1' },
+      { telefono_cliente: '34600333444', nombre_perfil_whatsapp: 'María Prueba' },
+      { telefono_cliente: '34600555666', nombre_perfil_whatsapp: 'Carlos Test' }
+    ];
+    const creados = [];
+    for (const m of muestras) {
+      const [row, created] = await ClienteCapturado.findOrCreate({
+        where: { negocio_id: req.user.id, telefono_cliente: m.telefono_cliente },
+        defaults: {
+          negocio_id: req.user.id,
+          telefono_cliente: m.telefono_cliente,
+          nombre_perfil_whatsapp: m.nombre_perfil_whatsapp,
+          ultima_interaccion: new Date(),
+          veces_interactuado: 1
+        }
+      });
+      if (!created) {
+        await row.update({
+          ultima_interaccion: new Date(),
+          veces_interactuado: (row.veces_interactuado || 1) + 1
+        });
+      }
+      creados.push(row);
+    }
+    res.json({ ok: true, contactos: creados.length, mensaje: 'Clientes de prueba añadidos' });
+  } catch (error) {
+    console.error('[Contactos prueba]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/negocio/metricas
- * Query: ?periodo=7d|30d (default 7d)
- *
- * Devuelve:
- * - total_escaneos, total_clientes
- * - por_dia: [{ fecha, label, total }] últimos N días
- * - por_hora: [{ hora, total }] 0-23 (últimas 24h o del periodo)
+ * Horarios en zona Europe/Madrid
  */
 router.get('/metricas', async (req, res) => {
   try {
@@ -151,11 +197,11 @@ router.get('/metricas', async (req, res) => {
       where: { negocio_id: negocioId }
     });
 
+    // Desde medianoche de hace (dias-1) en Madrid → aprox. UTC
+    const hoyMadrid = madridHoyFecha();
     const desde = new Date();
-    desde.setHours(0, 0, 0, 0);
-    desde.setDate(desde.getDate() - (dias - 1));
+    desde.setUTCDate(desde.getUTCDate() - (dias + 1)); // margen amplio; filtramos por clave Madrid
 
-    // Escaneos del periodo
     const escaneos = await Escaneo.findAll({
       where: {
         negocio_id: negocioId,
@@ -165,19 +211,19 @@ router.get('/metricas', async (req, res) => {
       raw: true
     });
 
-    // Agregar por día
+    // Etiquetas de los últimos N días en Madrid
     const porDiaMap = {};
     const labelsDia = [];
-    for (let i = 0; i < dias; i++) {
-      const d = new Date(desde);
-      d.setDate(desde.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
+    for (let i = dias - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 10);
       porDiaMap[key] = 0;
       labelsDia.push(key);
     }
     for (const e of escaneos) {
-      const key = new Date(e.scanned_at).toISOString().slice(0, 10);
-      if (porDiaMap[key] !== undefined) porDiaMap[key]++;
+      const { fecha } = madridParts(e.scanned_at);
+      if (porDiaMap[fecha] !== undefined) porDiaMap[fecha]++;
     }
 
     const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -186,25 +232,28 @@ router.get('/metricas', async (req, res) => {
       return {
         fecha,
         label: diasSemana[d.getDay()] + ' ' + fecha.slice(8, 10),
-        total: porDiaMap[fecha]
+        total: porDiaMap[fecha] || 0
       };
     });
 
-    // Agregar por hora (0-23) sobre los escaneos del periodo
+    // Horas 0-23 en horario de España
     const porHoraArr = Array.from({ length: 24 }, (_, h) => ({ hora: h, total: 0 }));
     for (const e of escaneos) {
-      const h = new Date(e.scanned_at).getHours();
-      porHoraArr[h].total++;
+      const { fecha, hora } = madridParts(e.scanned_at);
+      if (labelsDia.includes(fecha) && hora >= 0 && hora < 24) {
+        porHoraArr[hora].total++;
+      }
     }
 
-    // También últimos 7 días como array simple (compatibilidad frontend)
+    const totalPeriodo = labelsDia.reduce((s, f) => s + (porDiaMap[f] || 0), 0);
     const escaneos_semana = por_dia.slice(-7).map(d => d.total);
 
     res.json({
       total_escaneos: qr?.contador_escaneos || 0,
       total_clientes: totalClientes,
-      total_periodo: escaneos.length,
+      total_periodo: totalPeriodo,
       periodo_dias: dias,
+      zona: 'Europe/Madrid',
       por_dia,
       por_hora: porHoraArr,
       escaneos_semana
