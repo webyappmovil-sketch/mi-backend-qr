@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sequelize } from './models/index.js';
+import { sequelize, SuperAdmin, Negocio } from './models/index.js';
 import redirectRouter from './routes/redirect.js';
 import stripeWebhook from './routes/webhooks/stripe.js';
 import revolutWebhook from './routes/webhooks/revolut.js';
