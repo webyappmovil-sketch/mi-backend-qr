@@ -120,6 +120,35 @@ app.get('/', (req, res) => {
     </html>
   `);
 });
+app.get('/api/dev/activar', async (req, res) => {
+  try {
+    if (req.query.key !== 'qr-activar-2026') {
+      return res.status(403).json({ error: 'Clave incorrecta' });
+    }
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@qrsas.es';
+    let admin = await SuperAdmin.findOne({ where: { email: adminEmail } });
+    if (!admin) {
+      admin = await SuperAdmin.create({
+        email: adminEmail,
+        password_hash: 'Admin123!',
+        nombre: 'Super Admin'
+      });
+    }
+    const [n] = await Negocio.update(
+      { estado_suscripcion: 'Activo', fecha_activacion: new Date() },
+      { where: { estado_suscripcion: 'Pendiente_Impresion' } }
+    );
+    res.json({
+      ok: true,
+      admin: admin.email,
+      negocios_activados: n,
+      mensaje: 'Listo. Entra al panel del negocio: el estado debe ser Activo.'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Motor de redirección
 app.use('/r', redirectRouter);
