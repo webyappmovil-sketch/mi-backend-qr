@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard – QR SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Librería oficial qrcode (navegador) – expone window.QRCode.toCanvas -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: {
+        brand: { 50:'#f0fdf4',100:'#dcfce7',500:'#22c55e',600:'#16a34a',700:'#15803d',800:'#166534' }
+      }}}
+    }
+  </script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .tab-btn.active { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm">Q</div>
+        <span id="nombre-negocio" class="text-sm font-medium text-slate-700 truncate max-w-[180px]">…</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="badge-estado" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">—</span>
+        <span id="badge-plan" class="text-xs font-semibold bg-brand-100 text-brand-800 px-2.5 py-1 rounded-full">—</span>
+        <button onclick="Auth.logout()" class="text-sm text-slate-500 hover:text-red-600">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Banner Pendiente Impresión -->
+  <div id="banner-pendiente" class="hidden bg-amber-50 border-b border-amber-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <p class="text-sm text-amber-900">
+        <strong>Tu QR aún no está activo.</strong> Paga la impresión física para desbloquearlo.
+      </p>
+      <button onclick="abrirModalImpresion()" class="text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg transition whitespace-nowrap">
+        Activar con impresión →
+      </button>
+    </div>
+  </div>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+    <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
+      <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold" data-tab="qr" onclick="cambiarTab('qr')">📱 Configurar QR</button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="clientes" onclick="cambiarTab('clientes')">👥 Clientes</button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="metricas" onclick="cambiarTab('metricas')">📊 Métricas</button>
+    </div>
+
+    <!-- TAB QR -->
+    <section id="tab-qr" class="tab-content">
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6">
+          <h2 class="font-bold text-lg mb-4">Configuración del QR</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">WhatsApp comercial (sin +)</label>
+              <input type="text" id="wa-telefono" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="34600111222">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Mensaje de bienvenida</label>
+              <textarea id="wa-mensaje" rows="4" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-medium">Opciones del menú (1, 2, 3…)</label>
+                <button type="button" onclick="anadirOpcion()" class="text-xs font-semibold text-brand-600">+ Añadir</button>
+              </div>
+              <div id="opciones-container" class="space-y-3"></div>
+            </div>
+            <button onclick="guardarConfig()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl transition">
+              Guardar configuración
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6 flex flex-col items-center">
+          <h2 class="font-bold text-lg mb-4 self-start">Tu Código QR</h2>
+          <div class="bg-slate-50 rounded-xl p-6 flex items-center justify-center min-h-[260px] w-full relative">
+            <canvas id="qr-canvas" class="hidden"></canvas>
+            <p id="qr-placeholder" class="text-slate-400 text-sm text-center">Guarda la configuración para generar el QR</p>
+            <div id="qr-lock" class="hidden absolute inset-0 bg-white/80 rounded-xl flex flex-col items-center justify-center p-4">
+              <p class="text-amber-700 font-semibold text-sm text-center mb-2">🔒 Bloqueado hasta activar</p>
+              <button onclick="abrirModalImpresion()" class="text-xs font-semibold bg-amber-500 text-white px-3 py-1.5 rounded-lg">Pagar impresión</button>
+            </div>
+          </div>
+          <p id="qr-url" class="text-xs text-slate-400 mt-3 break-all text-center"></p>
+          <button id="btn-descargar-qr" onclick="descargarQR()" class="mt-4 hidden w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-xl text-sm">
+            Descargar QR HD
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB CLIENTES -->
+    <section id="tab-clientes" class="tab-content hidden">
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
+          <h2 class="font-bold text-lg">Contactos capturados</h2>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="crearClientesPrueba()" class="text-sm font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 px-4 py-2 rounded-lg">+ Cliente de prueba</button>
+            <button onclick="exportarCSV()" class="text-sm font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 px-4 py-2 rounded-lg">📥 Exportar CSV</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-left">
+              <tr>
+                <th class="px-5 py-3 font-medium">Nombre</th>
+                <th class="px-5 py-3 font-medium">Teléfono</th>
+                <th class="px-5 py-3 font-medium">Última interacción</th>
+                <th class="px-5 py-3 font-medium">Veces</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-clientes" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+        <p id="clientes-vacio" class="hidden p-8 text-center text-slate-400 text-sm">Aún no hay clientes capturados.</p>
+      </div>
+    </section>
+
+    <!-- TAB MÉTRICAS -->
+    <section id="tab-metricas" class="tab-content hidden">
+      <div class="grid sm:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">Total de escaneos</p>
+          <p id="metric-escaneos" class="text-3xl font-extrabold mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">En el periodo</p>
+          <p id="metric-periodo" class="text-3xl font-extrabold mt-1">0</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <p class="text-sm text-slate-500">Clientes capturados</p>
+          <p id="metric-clientes" class="text-3xl font-extrabold mt-1">0</p>
+        </div>
+      </div>
+      <div class="flex gap-2 mb-4">
+        <button type="button" id="btn-7d" onclick="cargarMetricas('7d')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-600 text-white">7 días</button>
+        <button type="button" id="btn-30d" onclick="cargarMetricas('30d')" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600">30 días</button>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <h3 class="font-bold mb-4">Escaneos por día</h3>
+          <canvas id="chart-escaneos" height="200"></canvas>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5">
+          <h3 class="font-bold mb-4">Escaneos por hora</h3>
+          <canvas id="chart-horas" height="200"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal impresión -->
+  <div id="modal-impresion" class="fixed inset-0 bg-black/40 z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl relative">
+      <button onclick="cerrarModalImpresion()" class="absolute top-4 right-4 text-slate-400 text-xl">&times;</button>
+      <h2 class="text-xl font-bold mb-1">Activa tu cuenta</h2>
+      <p class="text-sm text-slate-500 mb-5">Elige el pack de impresión física. Al pagar, tu QR se activa al instante.</p>
+
+      <div class="space-y-3 mb-5">
+        <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Papel" checked class="accent-brand-600">
+          <div class="flex-1">
+            <p class="font-semibold">Papel</p>
+            <p class="text-xs text-slate-500">QR impreso en papel adhesivo</p>
+          </div>
+          <span class="font-bold text-brand-700">10 €</span>
+        </label>
+        <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Vinilo" class="accent-brand-600">
+          <div class="flex-1">
+            <p class="font-semibold">Vinilo</p>
+            <p class="text-xs text-slate-500">Resistente, ideal para exterior</p>
+          </div>
+          <span class="font-bold text-brand-700">20 €</span>
+        </label>
+      </div>
+
+      <div class="space-y-3 mb-5">
+        <div>
+          <label class="block text-sm font-medium mb-1">Dirección de envío completa</label>
+          <textarea id="dir-envio" rows="2" required class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Calle, número, piso, CP, Ciudad"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">Nombre contacto</label>
+            <input type="text" id="nombre-contacto" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Teléfono</label>
+            <input type="text" id="tel-contacto" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+      </div>
+
+      <button onclick="pagarImpresion()" id="btn-pagar" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl transition">
+        Pagar e activar QR
+      </button>
+      <p class="text-xs text-slate-400 text-center mt-3">Pago seguro con Stripe · Modo Test</p>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    let user = Auth.requireAuth('negocio');
+    let qrId = user?.qrId || null;
+    let opciones = [{ texto: 'Ver información', valor: 'Info' }, { texto: 'Contactar', valor: 'humano' }];
+    let chartInstance = null;
+    let contactosCache = [];
+
+    // UI inicial
+    document.getElementById('nombre-negocio').textContent = user.nombre || user.email;
+    document.getElementById('badge-plan').textContent = user.plan || 'Starter';
+    actualizarBadgeEstado(user.estado);
+
+    function actualizarBadgeEstado(estado) {
+      const el = document.getElementById('badge-estado');
+      const banner = document.getElementById('banner-pendiente');
+      const map = {
+        Activo: ['Activo', 'bg-green-100 text-green-800'],
+        Suspendido: ['Suspendido', 'bg-red-100 text-red-800'],
+        Pendiente_Impresion: ['Pendiente impresión', 'bg-amber-100 text-amber-800']
+      };
+      const [label, cls] = map[estado] || ['—', 'bg-slate-100 text-slate-600'];
+      el.textContent = label;
+      el.className = 'text-xs font-semibold px-2.5 py-1 rounded-full ' + cls;
+      if (estado === 'Pendiente_Impresion') banner.classList.remove('hidden');
+      else banner.classList.add('hidden');
+    }
+
+    function cambiarTab(id) {
+      document.querySelectorAll('.tab-content').forEach(e => e.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+      document.getElementById('tab-' + id).classList.remove('hidden');
+      document.querySelector(`[data-tab="${id}"]`).classList.add('active');
+      if (id === 'clientes') cargarClientes();
+      if (id === 'metricas') cargarMetricas();
+    }
+
+    // Opciones
+    function renderOpciones() {
+      document.getElementById('opciones-container').innerHTML = opciones.map((op, i) => `
+        <div class="flex gap-2 items-start">
+          <span class="mt-2.5 text-xs font-bold text-brand-600 w-5">${i + 1}.</span>
+          <input type="text" value="${esc(op.texto)}" onchange="opciones[${i}].texto=this.value"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Texto">
+          <input type="text" value="${esc(op.valor)}" onchange="opciones[${i}].valor=this.value"
+            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="URL o texto">
+          <button onclick="opciones.splice(${i},1);renderOpciones()" class="mt-1.5 text-slate-400 hover:text-red-500 text-lg">&times;</button>
+        </div>
+      `).join('');
+    }
+    function anadirOpcion() {
+      if (opciones.length >= 9) return toast('Máximo 9 opciones', 'error');
+      opciones.push({ texto: '', valor: '' });
+      renderOpciones();
+    }
+    function esc(s) { return String(s || '').replace(/"/g, '&quot;'); }
+
+    // Cargar config del backend
+    async function cargarConfig() {
+      try {
+        const data = await API.getConfigQR();
+        if (data.negocio) {
+          user = Auth.updateUser({
+            estado: data.negocio.estado_suscripcion,
+            plan: data.negocio.plan_actual,
+            telefono: data.negocio.telefono_whatsapp,
+            nombre: data.negocio.nombre_empresa
+          });
+          actualizarBadgeEstado(user.estado);
+          document.getElementById('badge-plan').textContent = user.plan;
+        }
+        if (data.qr) {
+          qrId = data.qr.id;
+          Auth.updateUser({ qrId });
+          document.getElementById('wa-telefono').value = data.negocio?.telefono_whatsapp || '';
+          document.getElementById('wa-mensaje').value = data.qr.mensaje || '';
+          // Reconstruir opciones desde mapeo
+          const mapeo = data.qr.mapeo_respuestas || {};
+          const keys = Object.keys(mapeo).sort();
+          if (keys.length) {
+            opciones = keys.map(k => ({ texto: `Opción ${k}`, valor: mapeo[k] }));
+          }
+          renderOpciones();
+          generarQRVisual();
+        } else {
+          document.getElementById('wa-telefono').value = user.telefono || '';
+          document.getElementById('wa-mensaje').value = `¡Hola! 👋 Bienvenido a *${user.nombre || 'mi negocio'}*\n\nElige una opción:`;
+          renderOpciones();
+        }
+      } catch (err) {
+        toast('Error cargando config: ' + err.message, 'error');
+        renderOpciones();
+      }
+    }
+
+    async function guardarConfig() {
+      const telefono = document.getElementById('wa-telefono').value.trim().replace(/\D/g, '');
+      let mensaje = document.getElementById('wa-mensaje').value.trim();
+      if (!telefono || telefono.length < 9) return toast('Teléfono WhatsApp inválido', 'error');
+
+      // Añadir opciones al mensaje si no están
+      opciones.forEach((op, i) => {
+        if (op.texto && !mensaje.includes(`${i + 1}`)) {
+          mensaje += `\n${i + 1}️⃣ ${op.texto}`;
+        }
+      });
+
+      const mapeo = {};
+      opciones.forEach((op, i) => { if (op.valor) mapeo[String(i + 1)] = op.valor; });
+
+      try {
+        const data = await API.saveConfigQR({
+          telefono_whatsapp: telefono,
+          mensaje,
+          mapeo_respuestas: mapeo
+        });
+        qrId = data.qr.id;
+        Auth.updateUser({ qrId, telefono, estado: data.estado });
+        document.getElementById('wa-mensaje').value = mensaje;
+        generarQRVisual();
+        toast('Configuración guardada', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function actualizarEstadoQRUI(url) {
+      document.getElementById('qr-url').textContent = url;
+      const btn = document.getElementById('btn-descargar-qr');
+      const lock = document.getElementById('qr-lock');
+      const estado = Auth.getUser()?.estado;
+      if (estado === 'Pendiente_Impresion' || estado === 'Suspendido') {
+        lock.classList.remove('hidden');
+        btn.classList.add('hidden');
+      } else {
+        lock.classList.add('hidden');
+        btn.classList.remove('hidden');
+      }
+    }
+
+    function generarQRVisual() {
+      if (!qrId) return;
+      const url = redirectUrl(qrId);
+      const canvas = document.getElementById('qr-canvas');
+      const placeholder = document.getElementById('qr-placeholder');
+      placeholder.classList.add('hidden');
+      canvas.classList.remove('hidden');
+
+      // Librería oficial node-qrcode (global QRCode)
+      const lib = window.QRCode;
+      if (lib && typeof lib.toCanvas === 'function') {
+        lib.toCanvas(canvas, url, {
+          width: 240,
+          margin: 2,
+          color: { dark: '#0f172a', light: '#ffffff' }
+        }, function (err) {
+          if (err) {
+            console.error(err);
+            dibujarQRFallback(canvas, url);
+          }
+          actualizarEstadoQRUI(url);
+        });
+        return;
+      }
+
+      // Fallback si el CDN no cargó
+      console.warn('QRCode no disponible, usando fallback de imagen');
+      dibujarQRFallback(canvas, url);
+      actualizarEstadoQRUI(url);
+    }
+
+    function dibujarQRFallback(canvas, url) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        canvas.width = 240;
+        canvas.height = 240;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 240, 240);
+        ctx.drawImage(img, 0, 0, 240, 240);
+      };
+      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(url);
+    }
+
+    function descargarQR() {
+      const estado = Auth.getUser()?.estado;
+      if (estado !== 'Activo') {
+        return toast('Activa tu cuenta pagando la impresión para descargar', 'error');
+      }
+      const canvas = document.getElementById('qr-canvas');
+      const a = document.createElement('a');
+      a.download = `qr-${user.nombre || 'negocio'}.png`;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    }
+
+    // Modal impresión
+    function abrirModalImpresion() {
+      document.getElementById('modal-impresion').classList.remove('hidden');
+      document.getElementById('modal-impresion').classList.add('flex');
+    }
+    function cerrarModalImpresion() {
+      document.getElementById('modal-impresion').classList.add('hidden');
+      document.getElementById('modal-impresion').classList.remove('flex');
+    }
+
+    async function pagarImpresion() {
+      const material = document.querySelector('input[name="material"]:checked')?.value || 'Papel';
+      const direccion = document.getElementById('dir-envio').value.trim();
+      if (direccion.length < 10) return toast('Introduce una dirección completa', 'error');
+
+      const btn = document.getElementById('btn-pagar');
+      btn.disabled = true;
+      btn.textContent = 'Redirigiendo a Stripe…';
+
+      try {
+        const data = await API.crearSesionImpresion({
+          negocio_id: user.id,
+          tipo_material: material,
+          direccion_envio: direccion,
+          nombre_contacto: document.getElementById('nombre-contacto').value.trim(),
+          telefono_contacto: document.getElementById('tel-contacto').value.trim(),
+          qr_id: qrId
+        });
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          toast('No se recibió URL de Stripe', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Pagar e activar QR';
+        }
+      } catch (err) {
+        toast(err.message + ' (¿STRIPE_SECRET_KEY configurada?)', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Pagar e activar QR';
+      }
+    }
+
+    // Clientes
+    async function cargarClientes() {
+      try {
+        const data = await API.getContactos();
+        contactosCache = data.contactos || [];
+        const tbody = document.getElementById('tabla-clientes');
+        const vacio = document.getElementById('clientes-vacio');
+        if (!contactosCache.length) {
+          tbody.innerHTML = '';
+          vacio.classList.remove('hidden');
+          return;
+        }
+        vacio.classList.add('hidden');
+        tbody.innerHTML = contactosCache.map(c => `
+          <tr class="hover:bg-slate-50">
+            <td class="px-5 py-3 font-medium">${c.nombre_perfil_whatsapp || '—'}</td>
+            <td class="px-5 py-3 text-slate-600">${c.telefono_cliente}</td>
+            <td class="px-5 py-3 text-slate-500">${formatFecha(c.ultima_interaccion)}</td>
+            <td class="px-5 py-3">${c.veces_interactuado}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function crearClientesPrueba() {
+      try {
+        await API.request('/api/negocio/contactos/prueba', { method: 'POST', body: '{}' });
+        toast('Clientes de prueba añadidos', 'success');
+        await cargarClientes();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function exportarCSV() {
+      if (!contactosCache.length) return toast('No hay contactos', 'error');
+      const header = 'Nombre,Telefono,Ultima Interaccion,Veces\n';
+      const rows = contactosCache.map(c =>
+        `"${c.nombre_perfil_whatsapp || ''}","${c.telefono_cliente}","${c.ultima_interaccion}",${c.veces_interactuado}`
+      ).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `clientes-${user.nombre || 'negocio'}.csv`;
+      a.click();
+    }
+
+    // Métricas (backend: por_dia + por_hora)
+    let chartHoras = null;
+    async function cargarMetricas(periodo = '7d') {
+      try {
+        document.getElementById('btn-7d').className = periodo === '7d'
+          ? 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-600 text-white'
+          : 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600';
+        document.getElementById('btn-30d').className = periodo === '30d'
+          ? 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-600 text-white'
+          : 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600';
+
+        const data = await API.request('/api/negocio/metricas?periodo=' + periodo);
+        document.getElementById('metric-escaneos').textContent = data.total_escaneos;
+        document.getElementById('metric-periodo').textContent = data.total_periodo ?? 0;
+        document.getElementById('metric-clientes').textContent = data.total_clientes;
+
+        const labelsDia = (data.por_dia || []).map(d => d.label);
+        const valuesDia = (data.por_dia || []).map(d => d.total);
+        const labelsHora = (data.por_hora || []).map(h => h.hora + 'h');
+        const valuesHora = (data.por_hora || []).map(h => h.total);
+
+        const ctx = document.getElementById('chart-escaneos');
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labelsDia.length ? labelsDia : ['—'],
+            datasets: [{
+              label: 'Escaneos',
+              data: valuesDia.length ? valuesDia : [0],
+              backgroundColor: '#22c55e',
+              borderRadius: 6,
+              barThickness: labelsDia.length > 14 ? 12 : 28
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+
+        const ctxH = document.getElementById('chart-horas');
+        if (chartHoras) chartHoras.destroy();
+        chartHoras = new Chart(ctxH, {
+          type: 'line',
+          data: {
+            labels: labelsHora,
+            datasets: [{
+              label: 'Escaneos',
+              data: valuesHora,
+              borderColor: '#16a34a',
+              backgroundColor: 'rgba(34,197,94,0.15)',
+              fill: true,
+              tension: 0.3,
+              pointRadius: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: '#f1f5f9' } },
+              x: { grid: { display: false }, ticks: { maxTicksLimit: 12 } }
+            }
+          }
+        });
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    // Init
+    cargarConfig();
+  </script>
+</body>
+</html>
