@@ -149,7 +149,51 @@ app.get('/api/dev/activar', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+app.get('/api/dev/clientes-prueba', async (req, res) => {
+  try {
+    if (req.query.key !== 'qr-activar-2026') {
+      return res.status(403).json({ error: 'Clave incorrecta' });
+    }
+    const negocios = await Negocio.findAll();
+    if (!negocios.length) {
+      return res.json({ ok: false, mensaje: 'No hay negocios. Regístrate primero.' });
+    }
+    const muestras = [
+      { telefono_cliente: '34600111222', nombre_perfil_whatsapp: 'Cliente Demo 1' },
+      { telefono_cliente: '34600333444', nombre_perfil_whatsapp: 'María Prueba' },
+      { telefono_cliente: '34600555666', nombre_perfil_whatsapp: 'Carlos Test' }
+    ];
+    let creados = 0;
+    for (const neg of negocios) {
+      for (const m of muestras) {
+        const [row, created] = await ClienteCapturado.findOrCreate({
+          where: { negocio_id: neg.id, telefono_cliente: m.telefono_cliente },
+          defaults: {
+            negocio_id: neg.id,
+            telefono_cliente: m.telefono_cliente,
+            nombre_perfil_whatsapp: m.nombre_perfil_whatsapp,
+            ultima_interaccion: new Date(),
+            veces_interactuado: 1
+          }
+        });
+        if (!created) {
+          await row.update({
+            ultima_interaccion: new Date(),
+            veces_interactuado: (row.veces_interactuado || 1) + 1
+          });
+        }
+        creados++;
+      }
+    }
+    res.json({
+      ok: true,
+      contactos_creados: creados,
+      mensaje: 'Clientes de prueba listos. Abre Clientes y pulsa Ctrl+F5.'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // Motor de redirección
 app.use('/r', redirectRouter);
 
