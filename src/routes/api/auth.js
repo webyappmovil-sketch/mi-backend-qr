@@ -164,8 +164,14 @@ router.post('/login', async (req, res) => {
     }
 
     const valid = await bcrypt.compare(password, negocio.password_hash);
-    if (!valid) {
+        if (!valid) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
+    }
+
+    if (negocio.estado_suscripcion === 'Suspendido') {
+      return res.status(403).json({
+        error: 'Tu cuenta está suspendida. Contacta con soporte para reactivarla.'
+      });
     }
 
     const qr = await ConfiguracionQR.findOne({
