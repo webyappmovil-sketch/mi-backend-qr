@@ -80,9 +80,10 @@ const API = {
     const res = await fetch(url, { ...options, headers });
     const data = await res.json().catch(() => ({}));
 
-    if (res.status === 401) {
+       if (res.status === 401 || (res.status === 403 && /suspend/i.test(data.error || ''))) {
       Auth.logout();
-      throw new Error('Sesión expirada');
+      if (!location.pathname.endsWith('login.html')) location.href = 'login.html';
+      throw new Error(data.error || 'Sesión expirada');
     }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
