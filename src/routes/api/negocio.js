@@ -12,7 +12,24 @@ import { Negocio, ConfiguracionQR, ClienteCapturado, Escaneo } from '../../model
 
 const router = Router();
 
-router.use(requireAuth, requireNegocio);
+async function bloquearSuspendido(req, res, next) {
+  try {
+    if (req.user?.role !== 'negocio') return next();
+    const negocio = await Negocio.findByPk(req.user.id, {
+      attributes: ['estado_suscripcion']
+    });
+    if (negocio?.estado_suscripcion === 'Suspendido') {
+      return res.status(403).json({
+        error: 'Tu cuenta está suspendida. Contacta con soporte para reactivarla.'
+      });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
+router.use(requireAuth, requireNegocio, bloquearSuspendido);
 
 /**
  * GET /api/negocio/config-qr
