@@ -209,7 +209,11 @@
 
   <script src="js/app.js"></script>
   <script>
-    let user = Auth.requireAuth('negocio');
+       let user = Auth.requireAuth('negocio');
+    if (user.estado === 'Suspendido') {
+      Auth.logout();
+      location.replace('login.html');
+    }
     let qrId = user?.qrId || null;
     let opciones = [{ texto: 'Ver información', valor: 'Info' }, { texto: 'Contactar', valor: 'humano' }];
     let chartInstance = null;
