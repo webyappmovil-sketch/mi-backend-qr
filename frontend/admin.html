@@ -122,7 +122,14 @@
         toast(err.message, 'error');
       }
     }
-
+    function textoPagado(n) {
+      if (n.pagado_eur == null) return '<span class="text-slate-400 font-normal">—</span>';
+      const euros = Number(n.pagado_eur).toFixed(2).replace('.', ',') + ' €';
+      if (n.pagado_detalle === 'mes') {
+        return euros + '<span class="block text-[11px] font-normal text-slate-400">al mes</span>';
+      }
+      return euros + '<span class="block text-[11px] font-normal text-slate-400">' + (n.pagado_detalle || 'impresión') + '</span>';
+    }
     async function cargarNegocios() {
       try {
         const data = await API.adminNegocios();
