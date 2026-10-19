@@ -53,9 +53,11 @@ router.post('/', async (req, res) => {
     }
   }
 
-  console.log(`[Stripe] Evento: ${event.type}`);
+    console.log(`[Stripe] Evento: ${event.type}`);
+  const tipoEvento = String(event.type || '').replace(/^v1\./, '');
 
   try {
+    switch (tipoEvento) {
     switch (event.type) {
       // ── Suscripción pagada (mensual Pro/Business) ─────────────────
       case 'invoice.payment_succeeded': {
