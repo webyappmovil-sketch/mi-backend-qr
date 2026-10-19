@@ -27,9 +27,42 @@ router.get('/negocios', async (req, res) => {
         'plan_actual', 'estado_suscripcion', 'fecha_activacion',
         'fecha_proximo_pago', 'created_at'
       ],
-      order: [['created_at', 'DESC']]
+            order: [['created_at', 'DESC']]
     });
-    res.json({ negocios });
+
+    const ids = negocios.map(n => n.id);
+    const pedidos = ids.length
+      ? await PedidoImpresion.findAll({
+          where: { negocio_id: ids },
+          order: [['created_at', 'DESC']]
+        })
+      : [];
+    const ultimoPedido = new Map();
+    for (const p of pedidos) {
+      if (!ultimoPedido.has(p.negocio_id)) ultimoPedido.set(p.negocio_id, p);
+    }
+
+    const lista = negocios.map(n => {
+      const plain = n.toJSON();
+      const ped = ultimoPedido.get(n.id);
+      let pagado_eur = null;
+      let pagado_detalle = null;
+      if (ped) {
+        pagado_eur = ped.tipo_material === 'Vinilo' ? 20 : 10;
+        pagado_detalle = ped.tipo_material === 'Vinilo' ? 'Vinilo' : 'Papel';
+      } else if (plain.plan_actual === 'Pro') {
+        pagado_eur = 19.99;
+        pagado_detalle = 'mes';
+      } else if (plain.plan_actual === 'Business') {
+        pagado_eur = 29.99;
+        pagado_detalle = 'mes';
+      }
+      plain.pagado_eur = pagado_eur;
+      plain.pagado_detalle = pagado_detalle;
+      return plain;
+    });
+
+    res.json({ negocios: lista });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
