@@ -124,8 +124,15 @@ router.post('/', async (req, res) => {
       }
 
       // ── Checkout completado (impresión O primera suscripción) ─────
-      case 'checkout.session.completed': {
-        const session = event.data.object;
+            case 'checkout.session.completed': {
+        let session = event.data.object;
+        if (!session?.metadata?.negocio_id && session?.id) {
+          try {
+            session = await stripe.checkout.sessions.retrieve(session.id);
+          } catch (err) {
+            console.error('[Stripe] No se pudo leer la sesión:', err.message);
+          }
+        }
         const metadata = session.metadata || {};
 
         if (session.payment_status !== 'paid' && session.status !== 'complete') {
