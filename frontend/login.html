@@ -104,6 +104,8 @@
       const isReg = m === 'registro';
       document.getElementById('campo-nombre').classList.toggle('hidden', !isReg);
       document.getElementById('campo-telefono').classList.toggle('hidden', !isReg);
+            document.getElementById('campo-repetir').classList.toggle('hidden', !isReg);
+      document.getElementById('input-password2').required = isReg;
       document.getElementById('tab-login').className = isReg
         ? 'flex-1 py-2 text-sm font-semibold rounded-lg text-slate-500 border-2 border-transparent hover:bg-slate-50'
         : 'flex-1 py-2 text-sm font-semibold rounded-lg bg-brand-50 text-brand-700 border-2 border-brand-500';
