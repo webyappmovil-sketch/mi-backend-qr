@@ -98,7 +98,12 @@
     }
 
     let mode = 'login';
-
+    function verClave(id, btn) {
+      const input = document.getElementById(id);
+      const mostrar = input.type === 'password';
+      input.type = mostrar ? 'text' : 'password';
+      btn.textContent = mostrar ? 'ocultar' : 'ver';
+    }
     function setMode(m) {
       mode = m;
       const isReg = m === 'registro';
@@ -131,6 +136,8 @@
           const nombre = document.getElementById('input-nombre').value.trim();
           const telefono = document.getElementById('input-telefono').value.trim();
           if (!nombre || !telefono) throw new Error('Completa nombre y teléfono WhatsApp');
+                    const password2 = document.getElementById('input-password2').value;
+          if (password !== password2) throw new Error('Las contraseñas no coinciden');
           path = '/api/auth/registro';
           body = { nombre_empresa: nombre, email, password, telefono_whatsapp: telefono };
         } else {
