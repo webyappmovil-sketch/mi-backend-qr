@@ -162,6 +162,18 @@
         toast(err.message, 'error');
       }
     }
+   
+    async function eliminarNegocio(id) {
+      if (!confirm('¿Eliminar esta cuenta? Se borran su QR, clientes y pedidos. No se puede deshacer.')) return;
+      try {
+        await API.request('/api/admin/negocios/' + id, { method: 'DELETE' });
+        toast('Cuenta eliminada', 'success');
+        cargarNegocios();
+        cargarMetricas();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
 
     async function cambiarEstado(id, estado) {
       if (!confirm(`¿Cambiar estado a ${estado}?`)) return;
