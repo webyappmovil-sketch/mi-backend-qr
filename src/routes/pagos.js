@@ -10,7 +10,9 @@
 import { Router } from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import { Negocio, ConfiguracionQR } from '../models/index.js';
+import { Negocio, ConfiguracionQR, PedidoImpresion } from '../models/index.js';
+import { activarNegocio } from '../services/pagos.js';
+import { enviarEmailNotificacionAdmin } from '../services/email.js';
 
 dotenv.config();
 
@@ -198,5 +200,72 @@ router.post('/crear-sesion-impresion', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+router.post('/confirmar-sesion', async (req, res) => {
+  try {
+    const sessionId = req.body?.session_id;
+    if (!sessionId || !String(sessionId).startsWith('cs_')) {
+      return res.status(400).json({ error: 'Sesión de pago no válida' });
+    }
 
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid' && session.status !== 'complete') {
+      return res.status(400).json({ error: 'El pago aún no está confirmado' });
+    }
+
+    const metadata = session.metadata || {};
+    if (metadata.tipo !== 'impresion' || !metadata.negocio_id) {
+      return res.status(400).json({ error: 'Este pago no es de impresión' });
+    }
+
+    const negocio = await Negocio.findByPk(metadata.negocio_id);
+    if (!negocio) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    const tipo = metadata.tipo_material === 'Vinilo' ? 'Vinilo' : 'Papel';
+    let pedido = await PedidoImpresion.findOne({
+      where: { negocio_id: negocio.id, tipo_material: tipo },
+      order: [['created_at', 'DESC']]
+    });
+    const yaProcesado = negocio.estado_suscripcion === 'Activo' && pedido;
+
+    if (!pedido) {
+      pedido = await PedidoImpresion.create({
+        negocio_id: negocio.id,
+        tipo_material: tipo,
+        direccion_envio_completa: metadata.direccion_envio || 'Sin dirección',
+        estado: 'Pendiente',
+        nombre_contacto: metadata.nombre_contacto || null,
+        telefono_contacto: metadata.telefono_contacto || null,
+        archivo_qr_url: metadata.qr_id
+          ? `${process.env.APP_BASE_URL || ''}/r/${metadata.qr_id}`
+          : null
+      });
+    }
+
+    await activarNegocio(negocio.id, { sessionId: session.id });
+
+    if (!yaProcesado) {
+      await enviarEmailNotificacionAdmin({
+        pedidoId: pedido.id,
+        nombreEmpresa: negocio.nombre_empresa,
+        emailNegocio: negocio.email,
+        tipoMaterial: tipo,
+        direccionEnvio: metadata.direccion_envio || '',
+        nombreContacto: metadata.nombre_contacto || '',
+        telefonoContacto: metadata.telefono_contacto || '',
+        archivoQrUrl: pedido.archivo_qr_url,
+        qrId: metadata.qr_id || null
+      });
+    }
+
+    res.json({
+      ok: true,
+      estado: 'Activo',
+      tipo_material: tipo,
+      pagado_eur: tipo === 'Vinilo' ? 20 : 10
+    });
+  } catch (error) {
+    console.error('[Pagos] confirmar-sesion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 export default router;
