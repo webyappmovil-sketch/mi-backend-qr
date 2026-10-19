@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
-import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado } from '../../models/index.js';
+import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, escaneo } from '../../models/index.js';
 import { Op } from 'sequelize';
 
 const router = Router();
@@ -106,6 +106,22 @@ router.patch('/negocios/:id/estado', async (req, res) => {
  * GET /api/admin/pedidos
  * Query: ?estado=Pendiente (default)
  */
+router.delete('/negocios/:id', async (req, res) => {
+  try {
+    const negocio = await Negocio.findByPk(req.params.id);
+    if (!negocio) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    await Escaneo.destroy({ where: { negocio_id: negocio.id } });
+    await ClienteCapturado.destroy({ where: { negocio_id: negocio.id } });
+    await PedidoImpresion.destroy({ where: { negocio_id: negocio.id } });
+    await ConfiguracionQR.destroy({ where: { negocio_id: negocio.id } });
+    await negocio.destroy();
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 router.get('/pedidos', async (req, res) => {
   try {
     const estado = req.query.estado || 'Pendiente';
