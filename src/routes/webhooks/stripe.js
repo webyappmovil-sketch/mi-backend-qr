@@ -58,8 +58,7 @@ router.post('/', async (req, res) => {
 
   try {
     switch (tipoEvento) {
-    switch (event.type) {
-      // ── Suscripción pagada (mensual Pro/Business) ─────────────────
+          // ── Suscripción pagada (mensual Pro/Business) ─────────────────
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object;
         const metadata =
