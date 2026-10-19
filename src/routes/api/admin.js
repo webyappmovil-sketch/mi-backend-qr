@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
-import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, escaneo } from '../../models/index.js';
+import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, Escaneo } from '../../models/index.js';
 import { Op } from 'sequelize';
 
 const router = Router();
