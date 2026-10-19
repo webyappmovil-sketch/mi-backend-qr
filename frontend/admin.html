@@ -153,6 +153,7 @@
               <div class="flex gap-2">
                 ${n.estado_suscripcion !== 'Activo' ? `<button onclick="cambiarEstado('${n.id}','Activo')" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Activar</button>` : ''}
                 ${n.estado_suscripcion !== 'Suspendido' ? `<button onclick="cambiarEstado('${n.id}','Suspendido')" class="text-xs font-semibold text-red-500 hover:text-red-600">Suspender</button>` : ''}
+                <button onclick="eliminarNegocio('${n.id}')" class="text-xs font-semibold text-slate-400 hover:text-red-600">Eliminar</button>
               </div>
             </td>
           </tr>
