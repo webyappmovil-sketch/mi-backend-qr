@@ -19,22 +19,38 @@
     </a>
     <p class="text-xs text-slate-400 mt-4">Si el estado no cambia, cierra sesión y vuelve a entrar.</p>
   </div>
-  <script>
-    // Refrescar datos de sesión si hay token
+    <script>
     const API_BASE = (location.hostname === 'localhost' || location.protocol === 'file:')
-      ? 'http://localhost:3000' : '';
+      ? 'http://localhost:3000'
+      : 'https://plataforma-qr-backend.onrender.com';
+
     (async () => {
+      const params = new URLSearchParams(location.search);
+      const sessionId = params.get('session_id');
       const token = sessionStorage.getItem('qr_saas_token');
-      if (!token) return;
       try {
-        const res = await fetch(API_BASE + '/api/auth/me', {
-          headers: { Authorization: 'Bearer ' + token }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          sessionStorage.setItem('qr_saas_user', JSON.stringify(data.user));
+        if (sessionId) {
+          const conf = await fetch(API_BASE + '/pagos/confirmar-sesion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId })
+          });
+          const data = await conf.json();
+          if (!conf.ok) throw new Error(data.error || 'No se pudo activar');
         }
-      } catch (_) {}
+        if (token) {
+          const res = await fetch(API_BASE + '/api/auth/me', {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            sessionStorage.setItem('qr_saas_user', JSON.stringify(data.user));
+          }
+        }
+      } catch (err) {
+        const p = document.querySelector('p.text-slate-600');
+        if (p) p.textContent = err.message;
+      }
     })();
   </script>
 </body>
