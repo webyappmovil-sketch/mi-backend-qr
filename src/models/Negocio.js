@@ -37,6 +37,10 @@ const Negocio = sequelize.define('Negocio', {
     allowNull: false,
     defaultValue: 'Pendiente_Impresion'
   },
+    vendedor_id: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
   token_api_whatsapp: {
     type: DataTypes.STRING(512),
     allowNull: true
