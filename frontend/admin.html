@@ -35,8 +35,10 @@
   <main class="max-w-6xl mx-auto px-4 py-6">
     <div class="grid sm:grid-cols-3 gap-4 mb-8">
       <div class="bg-white rounded-2xl border border-slate-200 p-5">
-        <p class="text-sm text-slate-500">MRR</p>
+                <p class="text-sm text-slate-500">MRR (cuotas mensuales)</p>
         <p class="text-3xl font-extrabold mt-1" id="m-mrr">—</p>
+        <p class="text-sm text-slate-500 mt-3">Impresiones cobradas</p>
+        <p class="text-xl font-bold text-green-700" id="m-impresiones">—</p>
       </div>
       <div class="bg-white rounded-2xl border border-slate-200 p-5">
         <p class="text-sm text-slate-500">Negocios activos</p>
@@ -115,7 +117,9 @@
     async function cargarMetricas() {
       try {
         const m = await API.adminMetricas();
-        document.getElementById('m-mrr').textContent = m.mrr.toFixed(2) + ' €';
+                document.getElementById('m-mrr').textContent = Number(m.mrr || 0).toFixed(2).replace('.', ',') + ' €';
+        const cajaImp = document.getElementById('m-impresiones');
+        if (cajaImp) cajaImp.textContent = Number(m.impresiones || 0).toFixed(2).replace('.', ',') + ' €';
         document.getElementById('m-activos').textContent = m.activos;
         document.getElementById('m-pedidos').textContent = m.pedidos_pendientes;
       } catch (err) {
@@ -214,7 +218,7 @@
               <p class="text-xs text-slate-500 mb-1"><strong>Contacto:</strong> ${p.nombre_contacto || '—'} · ${p.telefono_contacto || '—'}</p>
               <p class="text-xs text-slate-600 bg-slate-50 rounded-lg p-2.5 mb-4 whitespace-pre-line">${p.direccion_envio_completa || '—'}</p>
               <div class="mt-auto flex gap-2">
-                <button onclick="mostrarQRImprenta('${qrId}','${nombre.replace(/'/g, "\\'")}')" class="flex-1 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-lg" ${!qrId ? 'disabled' : ''}>
+                                <button type="button" data-qr="${qrId}" onclick="descargarQRPedido(this)" class="flex-1 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-lg" ${!qrId ? 'disabled' : ''}>
                   Descargar QR
                 </button>
                 <button onclick="marcarEnviado('${p.id}')" class="flex-1 text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 py-2 rounded-lg">
@@ -238,6 +242,21 @@
         cargarMetricas();
       } catch (err) {
         toast(err.message, 'error');
+      }
+    }
+    async function descargarQRPedido(btn) {
+      const qrId = btn.getAttribute('data-qr');
+      if (!qrId) return toast('Este pedido no tiene código QR', 'error');
+      const url = location.origin + '/r/' + qrId;
+      const canvas = document.createElement('canvas');
+      try {
+        await QRCode.toCanvas(canvas, url, { width: 1024, margin: 2 });
+        const a = document.createElement('a');
+        a.download = 'qr-imprenta.png';
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      } catch (err) {
+        toast('No se pudo descargar el QR', 'error');
       }
     }
 
