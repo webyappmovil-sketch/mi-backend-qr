@@ -200,7 +200,10 @@ router.get('/metricas', async (req, res) => {
       where: { plan_actual: 'Business', estado_suscripcion: 'Activo' }
     });
     const mrr = (proCount * 19.99) + (businessCount * 29.99);
-
+    const pedidosTodos = await PedidoImpresion.findAll({ attributes: ['tipo_material'] });
+    const impresiones = pedidosTodos.reduce((suma, p) => {
+      return suma + (p.tipo_material === 'Vinilo' ? 20 : 10);
+    }, 0);
     // Registros de hoy
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -212,7 +215,8 @@ router.get('/metricas', async (req, res) => {
       total_negocios: totalNegocios,
       activos,
       pedidos_pendientes: pendientes,
-      mrr: Math.round(mrr * 100) / 100,
+           mrr: Math.round(mrr * 100) / 100,
+      impresiones: Math.round(impresiones * 100) / 100,
       registros_hoy: registrosHoy
     });
   } catch (error) {
