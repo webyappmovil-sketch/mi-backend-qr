@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
-import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, Escaneo } from '../../models/index.js';
+import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, Escaneo, Vendedor } from '../../models/index.js';
 import { Op } from 'sequelize';
 
 const router = Router();
@@ -223,5 +223,96 @@ router.get('/metricas', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+function codigoVendedor() {
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += letras[Math.floor(Math.random() * letras.length)];
+  return s;
+}
 
+router.get('/vendedores', async (req, res) => {
+  try {
+    const lista = await Vendedor.findAll({ order: [['created_at', 'DESC']] });
+    const base = process.env.APP_BASE_URL || 'https://plataforma-qr-backend.onrender.com';
+    const vendedores = lista.map((v) => ({
+      id: v.id,
+      nombre: v.nombre,
+      email: v.email,
+      telefono: v.telefono,
+      codigo: v.codigo,
+      estado: v.estado,
+      tiene_clave: !!v.password_hash,
+      enlace: `${base}/login.html?v=${v.codigo}`
+    }));
+    res.json({
+      vendedores,
+      codigo_admin: 'DIRECTO',
+      enlace_admin: `${base}/login.html?v=DIRECTO`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/vendedores', async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const telefono = String(req.body.telefono || '').trim();
+    if (!nombre || !email || !telefono) {
+      return res.status(400).json({ error: 'Nombre, email y teléfono son obligatorios' });
+    }
+    const existe = await Vendedor.findOne({ where: { email } });
+    if (existe) return res.status(400).json({ error: 'Ese email ya está registrado' });
+
+    let codigo = codigoVendedor();
+    while (await Vendedor.findOne({ where: { codigo } })) codigo = codigoVendedor();
+
+    const vendedor = await Vendedor.create({
+      nombre, email, telefono, codigo, estado: 'Activo'
+    });
+    const base = process.env.APP_BASE_URL || 'https://plataforma-qr-backend.onrender.com';
+    res.json({
+      ok: true,
+      vendedor: {
+        id: vendedor.id,
+        nombre: vendedor.nombre,
+        email: vendedor.email,
+        telefono: vendedor.telefono,
+        codigo: vendedor.codigo,
+        estado: vendedor.estado,
+        enlace: `${base}/login.html?v=${vendedor.codigo}`
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/vendedores/:id/estado', async (req, res) => {
+  try {
+    const estado = req.body.estado;
+    if (!['Activo', 'Bloqueado'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    const vendedor = await Vendedor.findByPk(req.params.id);
+    if (!vendedor) return res.status(404).json({ error: 'Vendedor no encontrado' });
+    await vendedor.update({ estado });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/vendedores/:id', async (req, res) => {
+  try {
+    const vendedor = await Vendedor.findByPk(req.params.id);
+    if (!vendedor) return res.status(404).json({ error: 'Vendedor no encontrado' });
+    await Negocio.update({ vendedor_id: null }, { where: { vendedor_id: vendedor.id } });
+    await vendedor.destroy();
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 export default router;
