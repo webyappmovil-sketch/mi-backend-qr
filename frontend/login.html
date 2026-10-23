@@ -28,10 +28,11 @@
         <button id="tab-login" onclick="setMode('login')" class="flex-1 py-2 text-sm font-semibold rounded-lg bg-brand-50 text-brand-700 border-2 border-brand-500">Iniciar sesión</button>
         <button id="tab-registro" onclick="setMode('registro')" class="flex-1 py-2 text-sm font-semibold rounded-lg text-slate-500 border-2 border-transparent hover:bg-slate-50">Registrarse</button>
       </div>
-
+      <button type="button" onclick="setMode('vendedor')" class="w-full mb-4 text-sm text-slate-500 hover:text-green-700">¿Eres vendedor? Crea tu clave</button>
+      <p id="aviso-codigo" class="hidden mb-4 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2"></p>
       <form id="form-auth" onsubmit="handleAuth(event)" class="space-y-4">
         <div id="campo-nombre" class="hidden">
-          <label class="block text-sm font-medium mb-1">Nombre del local</label>
+                    <label id="label-nombre" class="block text-sm font-medium mb-1">Nombre del local</label>
           <input type="text" id="input-nombre" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Mi Restaurante S.L.">
         </div>
         <div>
@@ -94,10 +95,17 @@
 
     if (Auth.isLoggedIn()) {
       const u = Auth.getUser();
-      location.href = u.role === 'admin' ? 'admin.html' : 'dashboard.html';
+           irPanel(u);
     }
 
-    let mode = 'login';
+        let mode = 'login';
+    const codigoInvitacion = (new URLSearchParams(location.search).get('v') || '').trim().toUpperCase();
+
+    function irPanel(user) {
+      if (user.role === 'admin') location.href = 'admin.html';
+      else if (user.role === 'vendedor') location.href = 'vendedor.html';
+      else location.href = 'dashboard.html';
+    }
     function verClave(id, btn) {
       const input = document.getElementById(id);
       const mostrar = input.type === 'password';
@@ -106,7 +114,11 @@
     }
     function setMode(m) {
       mode = m;
-      const isReg = m === 'registro';
+            const esVendedor = m === 'vendedor';
+      const mostrarDatos = m === 'registro' || esVendedor;
+      document.getElementById('label-nombre').textContent = esVendedor ? 'Nombre del vendedor' : 'Nombre del local';
+      document.getElementById('input-nombre').placeholder = esVendedor ? 'Tu nombre' : 'Mi Restaurante S.L.';
+            const isReg = mostrarDatos;
       document.getElementById('campo-nombre').classList.toggle('hidden', !isReg);
       document.getElementById('campo-telefono').classList.toggle('hidden', !isReg);
             document.getElementById('campo-repetir').classList.toggle('hidden', !isReg);
@@ -138,8 +150,13 @@
           if (!nombre || !telefono) throw new Error('Completa nombre y teléfono WhatsApp');
                     const password2 = document.getElementById('input-password2').value;
           if (password !== password2) throw new Error('Las contraseñas no coinciden');
-          path = '/api/auth/registro';
-          body = { nombre_empresa: nombre, email, password, telefono_whatsapp: telefono };
+                    if (mode === 'vendedor') {
+            path = '/api/auth/registro-vendedor';
+            body = { nombre, email, password, telefono };
+          } else {
+            path = '/api/auth/registro';
+            body = { nombre_empresa: nombre, email, password, telefono_whatsapp: telefono, codigo_vendedor: codigoInvitacion };
+          }
         } else {
           path = '/api/auth/login';
           body = { email, password };
@@ -154,13 +171,21 @@
         if (!res.ok) throw new Error(data.error || 'Error de autenticación');
 
         Auth.login(data);
-        location.href = data.user.role === 'admin' ? 'admin.html' : 'dashboard.html';
+                irPanel(data.user);
       } catch (err) {
         errEl.textContent = err.message;
         errEl.classList.remove('hidden');
         btn.disabled = false;
         btn.textContent = 'Continuar';
       }
+    }
+        if (codigoInvitacion) {
+      const aviso = document.getElementById('aviso-codigo');
+      aviso.textContent = codigoInvitacion === 'DIRECTO'
+        ? 'Registro de venta directa del administrador.'
+        : 'Registro invitado. El negocio quedará asignado a tu vendedor.';
+      aviso.classList.remove('hidden');
+      setMode('registro');
     }
   </script>
 </body>
