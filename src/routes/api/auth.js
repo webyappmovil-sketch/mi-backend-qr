@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-import { Negocio, SuperAdmin, ConfiguracionQR } from '../../models/index.js';
+import { Negocio, SuperAdmin, ConfiguracionQR, Vendedor } from '../../models/index.js';
 import { signToken, requireAuth } from '../../middleware/auth.js';
 import { enviarEmailBienvenida } from '../../services/email.js';
 
@@ -51,11 +51,22 @@ router.post('/registro', async (req, res) => {
       return res.status(400).json({ error: 'Email reservado' });
     }
 
+        let vendedorId = null;
+    const codigo = String(req.body.codigo_vendedor || '').trim().toUpperCase();
+    if (codigo && codigo !== 'DIRECTO') {
+      const vendedor = await Vendedor.findOne({ where: { codigo } });
+      if (!vendedor || vendedor.estado !== 'Activo') {
+        return res.status(400).json({ error: 'El enlace del vendedor no está activo' });
+      }
+      vendedorId = vendedor.id;
+    }
+
     const negocio = await Negocio.create({
       nombre_empresa: nombre_empresa.trim(),
       email: email.toLowerCase().trim(),
       password_hash: password, // se hashea en el hook beforeCreate
       telefono_whatsapp: phoneClean,
+      vendedor_id: vendedorId,
       plan_actual: 'Starter',
       estado_suscripcion: 'Pendiente_Impresion'
     });
@@ -117,7 +128,62 @@ router.post('/registro', async (req, res) => {
  * Si email === ADMIN_EMAIL → rol admin
  * Si no → busca en Negocios
  */
-router.post('/login', async (req, res) => {
+router.post('/registro-vendedor', async (req, res) => {
+  try {
+    const nombre = String(req.body.nombre || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const telefono = String(req.body.telefono || '').replace(/\D/g, '');
+
+    if (!nombre || !email || !password) {
+      return res.status(400).json({ error: 'Nombre, email y contraseña son obligatorios' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
+    const vendedor = await Vendedor.findOne({ where: { email } });
+    if (!vendedor) {
+      return res.status(403).json({ error: 'Este correo no está habilitado. Pide al administrador que te registre.' });
+    }
+    if (vendedor.estado !== 'Activo') {
+      return res.status(403).json({ error: 'Tu acceso de vendedor está bloqueado.' });
+    }
+    if (vendedor.password_hash) {
+      return res.status(409).json({ error: 'Ya tienes contraseña. Entra con Iniciar sesión.' });
+    }
+
+    await vendedor.update({
+      nombre,
+      telefono: telefono || vendedor.telefono,
+      password_hash: password
+    });
+
+    const token = signToken({
+      id: vendedor.id,
+      role: 'vendedor',
+      email: vendedor.email,
+      nombre: vendedor.nombre,
+      codigo: vendedor.codigo
+    });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: vendedor.id,
+        role: 'vendedor',
+        email: vendedor.email,
+        nombre: vendedor.nombre,
+        codigo: vendedor.codigo
+      }
+    });
+  } catch (error) {
+    console.error('[Auth] Registro vendedor:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+    router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -158,6 +224,37 @@ router.post('/login', async (req, res) => {
     }
 
     // ── Negocio ──
+        const vendedor = await Vendedor.findOne({ where: { email: emailClean } });
+    if (vendedor) {
+      if (vendedor.estado !== 'Activo') {
+        return res.status(403).json({ error: 'Tu acceso de vendedor está bloqueado.' });
+      }
+      if (!vendedor.password_hash) {
+        return res.status(403).json({ error: 'Primero regístrate con este correo para crear tu contraseña.' });
+      }
+      const okVend = await bcrypt.compare(password, vendedor.password_hash);
+      if (!okVend) {
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
+      const tokenVend = signToken({
+        id: vendedor.id,
+        role: 'vendedor',
+        email: vendedor.email,
+        nombre: vendedor.nombre,
+        codigo: vendedor.codigo
+      });
+      return res.json({
+        token: tokenVend,
+        user: {
+          id: vendedor.id,
+          role: 'vendedor',
+          email: vendedor.email,
+          nombre: vendedor.nombre,
+          codigo: vendedor.codigo
+        }
+      });
+    }
+
     const negocio = await Negocio.findOne({ where: { email: emailClean } });
     if (!negocio) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
@@ -218,7 +315,9 @@ router.get('/me', requireAuth, async (req, res) => {
     if (req.user.role === 'admin') {
       return res.json({ user: req.user });
     }
-
+    if (req.user.role === 'vendedor') {
+      return res.json({ user: req.user });
+    }
     const negocio = await Negocio.findByPk(req.user.id);
     if (!negocio) {
       return res.status(404).json({ error: 'Negocio no encontrado' });
