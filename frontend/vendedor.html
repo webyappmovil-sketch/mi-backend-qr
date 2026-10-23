@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel vendedor – QR SaaS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <header class="bg-slate-900 text-white">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div>
+        <p class="text-xs text-slate-400">Vendedor</p>
+        <h1 id="nombre-vendedor" class="font-bold">Cargando…</h1>
+      </div>
+      <button onclick="Auth.logout()" class="text-sm text-slate-300">Salir</button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6">
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
+      <h2 class="font-bold">Tu enlace para clientes</h2>
+      <p class="text-sm text-slate-500 mb-3">Envía este enlace. El negocio que se registre aquí queda a tu nombre.</p>
+      <div class="flex gap-2">
+        <input id="mi-enlace" readonly class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50">
+        <button type="button" onclick="copiarEnlace()" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold">Copiar</button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div class="p-5 border-b border-slate-100">
+        <h2 class="font-bold">Tus clientes</h2>
+        <p class="text-sm text-slate-500">Solo puedes verlos. No puedes activar ni suspender.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-500 text-left">
+            <tr>
+              <th class="px-5 py-3 font-medium">Negocio</th>
+              <th class="px-5 py-3 font-medium">Email</th>
+              <th class="px-5 py-3 font-medium">Plan</th>
+              <th class="px-5 py-3 font-medium">Pagado</th>
+              <th class="px-5 py-3 font-medium">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-clientes" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </div>
+    <p id="aviso" class="hidden mt-4 text-sm text-red-600"></p>
+  </main>
+
+  <script src="js/app.js"></script>
+  <script>
+    const user = Auth.requireAuth('vendedor');
+
+    function copiarEnlace() {
+      const el = document.getElementById('mi-enlace');
+      navigator.clipboard.writeText(el.value);
+    }
+
+    function dinero(n) {
+      if (n.pagado_eur == null) return '—';
+      const euros = Number(n.pagado_eur).toFixed(2).replace('.', ',') + ' €';
+      return n.pagado_detalle === 'mes' ? euros + ' / mes' : euros + ' ' + (n.pagado_detalle || '');
+    }
+
+    (async () => {
+      try {
+        const data = await API.request('/api/auth/mis-clientes');
+        document.getElementById('nombre-vendedor').textContent = data.vendedor.nombre;
+        document.getElementById('mi-enlace').value = data.enlace;
+        const body = document.getElementById('tabla-clientes');
+        const lista = data.clientes || [];
+        if (!lista.length) {
+          body.innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Aún no tienes clientes</td></tr>';
+          return;
+        }
+        body.innerHTML = lista.map(n => `
+          <tr>
+            <td class="px-5 py-3 font-semibold">${n.nombre_empresa}</td>
+            <td class="px-5 py-3">${n.email}</td>
+            <td class="px-5 py-3">${n.plan_actual}</td>
+            <td class="px-5 py-3">${dinero(n)}</td>
+            <td class="px-5 py-3">${n.estado_suscripcion}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        const aviso = document.getElementById('aviso');
+        aviso.textContent = err.message;
+        aviso.classList.remove('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>
