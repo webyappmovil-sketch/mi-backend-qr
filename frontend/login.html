@@ -179,13 +179,34 @@
         btn.textContent = 'Continuar';
       }
     }
-        if (codigoInvitacion) {
-      const aviso = document.getElementById('aviso-codigo');
-      aviso.textContent = codigoInvitacion === 'DIRECTO'
-        ? 'Registro de venta directa del administrador.'
-        : 'Registro invitado. El negocio quedará asignado a tu vendedor.';
-      aviso.classList.remove('hidden');
-      setMode('registro');
+            if (codigoInvitacion) {
+      fetch(API_BASE + '/api/auth/enlace/' + encodeURIComponent(codigoInvitacion))
+        .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          const aviso = document.getElementById('aviso-codigo');
+          if (!res.ok) {
+            aviso.textContent = res.data.error || 'Enlace no válido';
+            aviso.classList.remove('hidden');
+            return;
+          }
+          if (res.data.modo === 'vendedor') {
+            setMode('vendedor');
+            if (res.data.nombre) document.getElementById('input-nombre').value = res.data.nombre;
+            if (res.data.email) {
+              const input = document.getElementById('input-email');
+              input.value = res.data.email;
+              input.readOnly = true;
+            }
+            aviso.textContent = 'Crea tu contraseña. Cuando termines, envía este mismo enlace a tus negocios.';
+            aviso.classList.remove('hidden');
+          } else {
+            setMode('registro');
+            aviso.textContent = codigoInvitacion === 'DIRECTO'
+              ? 'Registro de venta directa del administrador.'
+              : 'Registro del local. Quedará asignado a tu vendedor.';
+            aviso.classList.remove('hidden');
+          }
+        });
     }
   </script>
 </body>
