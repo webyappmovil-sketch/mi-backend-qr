@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-import { Negocio, SuperAdmin, ConfiguracionQR, Vendedor } from '../../models/index.js';
+import { Negocio, SuperAdmin, ConfiguracionQR, Vendedor, PedidoImpresion } from '../../models/index.js';
 import { signToken, requireAuth } from '../../middleware/auth.js';
 import { enviarEmailBienvenida } from '../../services/email.js';
 
@@ -362,6 +362,61 @@ router.get('/enlace/:codigo', async (req, res) => {
       });
     }
     return res.json({ modo: 'negocio' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+router.get('/mis-clientes', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'vendedor') {
+      return res.status(403).json({ error: 'Solo para vendedores' });
+    }
+    const vendedor = await Vendedor.findByPk(req.user.id);
+    if (!vendedor || vendedor.estado !== 'Activo') {
+      return res.status(403).json({ error: 'Tu acceso de vendedor está bloqueado.' });
+    }
+
+    const negocios = await Negocio.findAll({
+      where: { vendedor_id: vendedor.id },
+      attributes: ['id', 'nombre_empresa', 'email', 'telefono_whatsapp', 'plan_actual', 'estado_suscripcion', 'created_at'],
+      order: [['created_at', 'DESC']]
+    });
+    const ids = negocios.map(n => n.id);
+    const pedidos = ids.length
+      ? await PedidoImpresion.findAll({ where: { negocio_id: ids }, order: [['created_at', 'DESC']] })
+      : [];
+    const ultimo = new Map();
+    for (const p of pedidos) {
+      if (!ultimo.has(p.negocio_id)) ultimo.set(p.negocio_id, p);
+    }
+
+    const clientes = negocios.map(n => {
+      const plain = n.toJSON();
+      const ped = ultimo.get(n.id);
+      let pagado_eur = null;
+      let pagado_detalle = null;
+      if (ped) {
+        pagado_eur = ped.tipo_material === 'Vinilo' ? 20 : 10;
+        pagado_detalle = ped.tipo_material;
+      } else if (plain.plan_actual === 'Pro' && plain.estado_suscripcion === 'Activo') {
+        pagado_eur = 19.99;
+        pagado_detalle = 'mes';
+      } else if (plain.plan_actual === 'Business' && plain.estado_suscripcion === 'Activo') {
+        pagado_eur = 29.99;
+        pagado_detalle = 'mes';
+      }
+      plain.pagado = pagado_eur != null;
+      plain.pagado_eur = pagado_eur;
+      plain.pagado_detalle = pagado_detalle;
+      return plain;
+    });
+
+    const base = process.env.APP_BASE_URL || 'https://plataforma-qr-backend.onrender.com';
+    res.json({
+      vendedor: { nombre: vendedor.nombre, codigo: vendedor.codigo },
+      enlace: `${base}/login.html?v=${vendedor.codigo}`,
+      clientes
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
