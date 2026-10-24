@@ -68,6 +68,7 @@
               <tr>
                 <th class="px-5 py-3 font-medium">Negocio</th>
                 <th class="px-5 py-3 font-medium">Email</th>
+                                <th class="px-5 py-3 font-medium">Vendedor</th>
                 <th class="px-5 py-3 font-medium">Plan</th>
                                 <th class="px-5 py-3 font-medium">Pagado</th>
                                 <th class="px-5 py-3 font-medium">Estado</th>
@@ -191,6 +192,7 @@
           <tr class="hover:bg-slate-50">
             <td class="px-5 py-3 font-medium">${n.nombre_empresa}</td>
             <td class="px-5 py-3 text-slate-600">${n.email}</td>
+                        <td class="px-5 py-3">${n.vendedor_nombre || 'ECUAWEB'}</td>
             <td class="px-5 py-3"><span class="text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">${n.plan_actual}</span></td>
             <td class="px-5 py-3 font-semibold text-slate-800">${textoPagado(n)}</td>
             <td class="px-5 py-3"><span class="text-xs font-semibold px-2 py-0.5 rounded ${badge[n.estado_suscripcion] || ''}">${label[n.estado_suscripcion] || n.estado_suscripcion}</span></td>            <td class="px-5 py-3">
@@ -201,7 +203,7 @@
               </div>
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="6" class="px-5 py-8 text-center text-slate-400">Sin negocios</td></tr>';
+        `).join('') || '<tr><td colspan="7" class="px-5 py-8 text-center text-slate-400">Sin negocios</td></tr>';
       } catch (err) {
         toast(err.message, 'error');
       }
