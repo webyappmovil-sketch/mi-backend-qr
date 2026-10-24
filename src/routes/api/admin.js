@@ -25,7 +25,7 @@ router.get('/negocios', async (req, res) => {
       attributes: [
         'id', 'nombre_empresa', 'email', 'telefono_whatsapp',
         'plan_actual', 'estado_suscripcion', 'fecha_activacion',
-        'fecha_proximo_pago', 'created_at'
+        'fecha_proximo_pago',         'created_at', 'vendedor_id'
       ],
             order: [['created_at', 'DESC']]
     });
@@ -41,7 +41,11 @@ router.get('/negocios', async (req, res) => {
     for (const p of pedidos) {
       if (!ultimoPedido.has(p.negocio_id)) ultimoPedido.set(p.negocio_id, p);
     }
-
+    const vids = [...new Set(negocios.map(n => n.vendedor_id).filter(Boolean))];
+    const vendedores = vids.length
+      ? await Vendedor.findAll({ where: { id: vids }, attributes: ['id', 'nombre'] })
+      : [];
+    const nombresVend = new Map(vendedores.map(v => [v.id, v.nombre]));
     const lista = negocios.map(n => {
       const plain = n.toJSON();
       const ped = ultimoPedido.get(n.id);
@@ -57,6 +61,7 @@ router.get('/negocios', async (req, res) => {
         pagado_eur = 29.99;
         pagado_detalle = 'mes';
       }
+            plain.vendedor_nombre = plain.vendedor_id ? (nombresVend.get(plain.vendedor_id) || 'Vendedor') : 'ECUAWEB';
       plain.pagado_eur = pagado_eur;
       plain.pagado_detalle = pagado_detalle;
       return plain;
