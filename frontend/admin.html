@@ -207,15 +207,34 @@
       }
     }
    
-    async function eliminarNegocio(id) {
+        async function eliminarNegocio(id) {
       if (!confirm('¿Eliminar esta cuenta? Se borran su QR, clientes y pedidos. No se puede deshacer.')) return;
       try {
         await API.request('/api/admin/negocios/' + id, { method: 'DELETE' });
         toast('Cuenta eliminada', 'success');
         cargarNegocios();
-            function copiarTexto(id) {
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function copiarTexto(id) {
       const el = document.getElementById(id);
-      navigator.clipboard.writeText(el.value).then(() => toast('Enlace copiado', 'success')).catch(() => toast('No se pudo copiar', 'error'));
+      el.focus();
+      el.select();
+      let copiado = false;
+      try { copiado = document.execCommand('copy'); } catch (e) { copiado = false; }
+      if (copiado) {
+        toast('Enlace copiado', 'success');
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(el.value).then(function () {
+          toast('Enlace copiado', 'success');
+        }).catch(function () {
+          toast('Selecciona el enlace y cópialo con Ctrl+C', 'error');
+        });
+      }
     }
 
     async function cargarVendedores() {
@@ -227,24 +246,31 @@
           body.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-slate-400">Sin vendedores</td></tr>';
           return;
         }
-        body.innerHTML = lista.map(v => `
-          <tr>
-            <td class="px-5 py-3 font-semibold">${v.nombre}<div class="text-xs font-normal text-slate-400">${v.tiene_clave ? 'Ya creó su clave' : 'Aún no crea su clave'}</div></td>
-            <td class="px-5 py-3">${v.email}</td>
-            <td class="px-5 py-3">${v.telefono}</td>
-            <td class="px-5 py-3"><button type="button" class="text-xs font-semibold text-green-700" onclick="navigator.clipboard.writeText('${v.enlace}').then(()=>toast('Enlace copiado','success'))">Copiar enlace</button></td>
-            <td class="px-5 py-3">${v.estado}</td>
-            <td class="px-5 py-3">
-              <div class="flex gap-2">
-                ${v.estado !== 'Activo' ? `<button onclick="estadoVendedor('${v.id}','Activo')" class="text-xs font-semibold text-green-700">Activar</button>` : `<button onclick="estadoVendedor('${v.id}','Bloqueado')" class="text-xs font-semibold text-amber-600">Bloquear</button>`}
-                <button onclick="eliminarVendedor('${v.id}')" class="text-xs font-semibold text-red-500">Eliminar</button>
-              </div>
-            </td>
-          </tr>
-        `).join('');
+        body.innerHTML = lista.map(function (v) {
+          return '<tr>' +
+            '<td class="px-5 py-3 font-semibold">' + v.nombre + '</td>' +
+            '<td class="px-5 py-3">' + v.email + '</td>' +
+            '<td class="px-5 py-3">' + v.telefono + '</td>' +
+            '<td class="px-5 py-3"><button type="button" class="text-xs font-semibold text-green-700" onclick="copiarTextoDirecto(\'' + v.enlace + '\')">Copiar enlace</button></td>' +
+            '<td class="px-5 py-3">' + v.estado + '</td>' +
+            '<td class="px-5 py-3">' +
+              (v.estado !== 'Activo'
+                ? '<button onclick="estadoVendedor(\'' + v.id + '\',\'Activo\')" class="text-xs font-semibold text-green-700">Activar</button>'
+                : '<button onclick="estadoVendedor(\'' + v.id + '\',\'Bloqueado\')" class="text-xs font-semibold text-amber-600">Bloquear</button>') +
+              ' <button onclick="eliminarVendedor(\'' + v.id + '\')" class="text-xs font-semibold text-red-500">Eliminar</button>' +
+            '</td></tr>';
+        }).join('');
       } catch (err) {
         toast(err.message, 'error');
       }
+    }
+
+    function copiarTextoDirecto(texto) {
+      const el = document.getElementById('enlace-admin');
+      const anterior = el.value;
+      el.value = texto;
+      copiarTexto('enlace-admin');
+      el.value = anterior;
     }
 
     async function crearVendedor(e) {
@@ -284,12 +310,6 @@
         await API.request('/api/admin/vendedores/' + id, { method: 'DELETE' });
         toast('Vendedor eliminado', 'success');
         cargarVendedores();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    }
-
-        cargarMetricas();
       } catch (err) {
         toast(err.message, 'error');
       }
