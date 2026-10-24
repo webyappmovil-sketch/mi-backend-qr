@@ -23,7 +23,7 @@
       <p class="text-sm text-slate-500 mb-3">Envía este enlace. El negocio que se registre aquí queda a tu nombre.</p>
       <div class="flex gap-2">
         <input id="mi-enlace" readonly class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50">
-        <button type="button" onclick="copiarEnlace()" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold">Copiar</button>
+                <button id="btn-copiar" type="button" onclick="copiarEnlace()" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold">Copiar</button>
       </div>
     </div>
 
@@ -55,9 +55,24 @@
   <script>
     const user = Auth.requireAuth('vendedor');
 
-    function copiarEnlace() {
+        function copiarEnlace() {
       const el = document.getElementById('mi-enlace');
-      navigator.clipboard.writeText(el.value);
+      const btn = document.getElementById('btn-copiar');
+      el.focus();
+      el.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      if (ok) {
+        btn.textContent = 'Copiado';
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(el.value).then(function () {
+          btn.textContent = 'Copiado';
+        }).catch(function () {
+          btn.textContent = 'Selecciona y Ctrl+C';
+        });
+      }
     }
 
         function dinero(n) {
