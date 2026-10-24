@@ -344,5 +344,26 @@ router.get('/me', requireAuth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
+router.get('/enlace/:codigo', async (req, res) => {
+  try {
+    const codigo = String(req.params.codigo || '').trim().toUpperCase();
+    if (!codigo || codigo === 'DIRECTO') {
+      return res.json({ modo: 'negocio' });
+    }
+    const vendedor = await Vendedor.findOne({ where: { codigo } });
+    if (!vendedor || vendedor.estado !== 'Activo') {
+      return res.status(404).json({ error: 'Este enlace no está activo' });
+    }
+    if (!vendedor.password_hash) {
+      return res.json({
+        modo: 'vendedor',
+        email: vendedor.email,
+        nombre: vendedor.nombre
+      });
+    }
+    return res.json({ modo: 'negocio' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 export default router;
