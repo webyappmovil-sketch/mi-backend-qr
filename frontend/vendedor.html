@@ -36,11 +36,12 @@
         <table class="w-full text-sm">
           <thead class="bg-slate-50 text-slate-500 text-left">
             <tr>
-              <th class="px-5 py-3 font-medium">Negocio</th>
-              <th class="px-5 py-3 font-medium">Email</th>
-              <th class="px-5 py-3 font-medium">Plan</th>
-              <th class="px-5 py-3 font-medium">Pagado</th>
-              <th class="px-5 py-3 font-medium">Estado</th>
+                          <tr>
+              <th class="px-5 py-3 font-medium">Nombre del local</th>
+              <th class="px-5 py-3 font-medium">Correo</th>
+              <th class="px-5 py-3 font-medium">Teléfono</th>
+              <th class="px-5 py-3 font-medium">Pago</th>
+            </tr>
             </tr>
           </thead>
           <tbody id="tabla-clientes" class="divide-y divide-slate-100"></tbody>
@@ -59,10 +60,10 @@
       navigator.clipboard.writeText(el.value);
     }
 
-    function dinero(n) {
-      if (n.pagado_eur == null) return '—';
+        function dinero(n) {
+      if (!n.pagado) return 'No pagado';
       const euros = Number(n.pagado_eur).toFixed(2).replace('.', ',') + ' €';
-      return n.pagado_detalle === 'mes' ? euros + ' / mes' : euros + ' ' + (n.pagado_detalle || '');
+      return 'Pagado ' + (n.pagado_detalle === 'mes' ? euros + ' / mes' : euros);
     }
 
     (async () => {
@@ -73,16 +74,15 @@
         const body = document.getElementById('tabla-clientes');
         const lista = data.clientes || [];
         if (!lista.length) {
-          body.innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">Aún no tienes clientes</td></tr>';
+          body.innerHTML = '<tr><td colspan="4" class="px-5 py-8 text-center text-slate-400">Aún no tienes clientes</td></tr>';
           return;
         }
         body.innerHTML = lista.map(n => `
           <tr>
-            <td class="px-5 py-3 font-semibold">${n.nombre_empresa}</td>
+                        <td class="px-5 py-3 font-semibold">${n.nombre_empresa}</td>
             <td class="px-5 py-3">${n.email}</td>
-            <td class="px-5 py-3">${n.plan_actual}</td>
+            <td class="px-5 py-3">${n.telefono_whatsapp || ''}</td>
             <td class="px-5 py-3">${dinero(n)}</td>
-            <td class="px-5 py-3">${n.estado_suscripcion}</td>
           </tr>
         `).join('');
       } catch (err) {
