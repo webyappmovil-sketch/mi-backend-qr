@@ -162,11 +162,11 @@
     <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl relative">
       <button onclick="cerrarModalImpresion()" class="absolute top-4 right-4 text-slate-400 text-xl">&times;</button>
       <h2 class="text-xl font-bold mb-1">Activa tu cuenta</h2>
-      <p class="text-sm text-slate-500 mb-5">Elige el pack de impresión física. Al pagar, tu QR se activa al instante.</p>
+            <p class="text-sm text-slate-500 mb-5">Elige impresión física o un plan mensual. Al pagar, tu QR se activa al instante.</p>
 
       <div class="space-y-3 mb-5">
         <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
-          <input type="radio" name="material" value="Papel" checked class="accent-brand-600">
+          <input type="radio" name="material" value="Papel" checked class="accent-brand-600" onchange="alElegirPlan()">
           <div class="flex-1">
             <p class="font-semibold">Papel</p>
             <p class="text-xs text-slate-500">QR impreso en papel adhesivo</p>
@@ -174,16 +174,48 @@
           <span class="font-bold text-brand-700">10 €</span>
         </label>
         <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
-          <input type="radio" name="material" value="Vinilo" class="accent-brand-600">
+          <input type="radio" name="material" value="Vinilo" class="accent-brand-600" onchange="alElegirPlan()">
           <div class="flex-1">
             <p class="font-semibold">Vinilo</p>
             <p class="text-xs text-slate-500">Resistente, ideal para exterior</p>
           </div>
           <span class="font-bold text-brand-700">20 €</span>
         </label>
+                <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Pro" class="accent-brand-600" onchange="alElegirPlan()">
+          <div class="flex-1">
+            <p class="font-semibold">Plan Pro</p>
+            <p class="text-xs text-slate-500">Hasta 5 QR dinámicos. Se cobra cada mes.</p>
+          </div>
+          <span class="font-bold text-brand-700">19,99 €</span>
+        </label>
+        <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Business" class="accent-brand-600" onchange="alElegirPlan()">
+          <div class="flex-1">
+            <p class="font-semibold">Plan Business</p>
+            <p class="text-xs text-slate-500">Hasta 50 QR dinámicos. Se cobra cada mes.</p>
+          </div>
+          <span class="font-bold text-brand-700">29,99 €</span>
+        </label>      
+        <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Pro" class="accent-brand-600" onchange="alElegirPlan()">
+          <div class="flex-1">
+            <p class="font-semibold">Plan Pro</p>
+            <p class="text-xs text-slate-500">Hasta 5 QR dinámicos. Se cobra cada mes.</p>
+          </div>
+          <span class="font-bold text-brand-700">19,99 €</span>
+        </label>
+        <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="radio" name="material" value="Business" class="accent-brand-600" onchange="alElegirPlan()">
+          <div class="flex-1">
+            <p class="font-semibold">Plan Business</p>
+            <p class="text-xs text-slate-500">Hasta 50 QR dinámicos. Se cobra cada mes.</p>
+          </div>
+          <span class="font-bold text-brand-700">29,99 €</span>
+        </label>
       </div>
 
-      <div class="space-y-3 mb-5">
+            <div id="bloque-envio" class="space-y-3 mb-5">
         <div>
           <label class="block text-sm font-medium mb-1">Dirección de envío completa</label>
           <textarea id="dir-envio" rows="2" required class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Calle, número, piso, CP, Ciudad"></textarea>
@@ -386,17 +418,43 @@ function descargarQR() {
 }
    
     // Modal impresión
-    function abrirModalImpresion() {
+        function abrirModalImpresion() {
       document.getElementById('modal-impresion').classList.remove('hidden');
       document.getElementById('modal-impresion').classList.add('flex');
+      if (user.plan === 'Pro' || user.plan === 'Business') {
+        const radio = document.querySelector('input[name="material"][value="' + user.plan + '"]');
+        if (radio) radio.checked = true;
+      }
+      alElegirPlan();
+    }
     }
     function cerrarModalImpresion() {
       document.getElementById('modal-impresion').classList.add('hidden');
       document.getElementById('modal-impresion').classList.remove('flex');
     }
-
+    function alElegirPlan() {
+      const valor = document.querySelector('input[name="material"]:checked')?.value || 'Papel';
+      const mensual = valor === 'Pro' || valor === 'Business';
+      document.getElementById('bloque-envio').classList.toggle('hidden', mensual);
+      document.getElementById('btn-pagar').textContent = mensual ? 'Pagar suscripción' : 'Pagar e activar QR';
+    }
     async function pagarImpresion() {
       const material = document.querySelector('input[name="material"]:checked')?.value || 'Papel';
+            if (material === 'Pro' || material === 'Business') {
+        const btnPlan = document.getElementById('btn-pagar');
+        btnPlan.disabled = true;
+        btnPlan.textContent = 'Redirigiendo a Stripe…';
+        try {
+          const dataPlan = await API.crearSesionSuscripcion(user.id, material);
+          if (dataPlan.url) window.location.href = dataPlan.url;
+          else throw new Error('No se recibió URL de Stripe');
+        } catch (err) {
+          toast(err.message, 'error');
+          btnPlan.disabled = false;
+          btnPlan.textContent = 'Pagar suscripción';
+        }
+        return;
+      }
       const direccion = document.getElementById('dir-envio').value.trim();
       if (direccion.length < 10) return toast('Introduce una dirección completa', 'error');
 
