@@ -3,11 +3,16 @@
  */
 
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
+import { getSecret, isProduction } from '../config/env.js';
 
-dotenv.config();
+const DEV_JWT_SECRET = 'qr-saas-dev-secret-change-in-production';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'qr-saas-dev-secret-change-in-production';
+// En producción es OBLIGATORIO definir JWT_SECRET (si falta, el servidor no arranca)
+const JWT_SECRET = getSecret('JWT_SECRET', DEV_JWT_SECRET, { rejectDefault: true });
+
+if (isProduction && JWT_SECRET.length < 32) {
+  console.warn('[Config] ⚠️  JWT_SECRET tiene menos de 32 caracteres. Usa uno largo y aleatorio.');
+}
 
 /**
  * Firma un token JWT

@@ -4,6 +4,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 async function seed() {
+  // PROTECCIÓN: este script hace sync({ force: true }) = BORRA TODAS LAS TABLAS.
+  // Solo se permite en local con SQLite, nunca contra Supabase/Render.
+  if (process.env.DATABASE_URL || process.env.NODE_ENV === 'production' || process.env.RENDER) {
+    console.error('❌ seed.js borra toda la base de datos y no se puede ejecutar aquí');
+    console.error('   (hay DATABASE_URL, NODE_ENV=production o estás en Render).');
+    process.exit(1);
+  }
+
   try {
     console.log('🔄 Sincronizando base de datos...');
     await sequelize.sync({ force: true }); // Borra y recrea todo (solo desarrollo)

@@ -21,6 +21,7 @@ import dotenv from 'dotenv';
 import { activarNegocio, suspenderNegocio, encontrarNegocioPorMetadata } from '../../services/pagos.js';
 import { PedidoImpresion, Negocio } from '../../models/index.js';
 import { enviarEmailNotificacionAdmin } from '../../services/email.js';
+import { isProduction } from '../../config/env.js';
 
 dotenv.config();
 
@@ -33,8 +34,16 @@ router.post('/', async (req, res) => {
 
   let event;
 
+  const sinSecret = !webhookSecret || webhookSecret.includes('xxxx');
+
+  // En producción NUNCA se aceptan eventos sin verificar la firma
+  if (sinSecret && isProduction) {
+    console.error('[Stripe Webhook] Falta STRIPE_WEBHOOK_SECRET: evento rechazado');
+    return res.status(500).send('Webhook no configurado');
+  }
+
   // En desarrollo sin secret real: parsear JSON y continuar (solo local)
-  if (!webhookSecret || webhookSecret.includes('xxxx')) {
+  if (sinSecret) {
     try {
       const raw = Buffer.isBuffer(req.body) ? req.body.toString() : JSON.stringify(req.body);
       event = typeof req.body === 'object' && !Buffer.isBuffer(req.body)

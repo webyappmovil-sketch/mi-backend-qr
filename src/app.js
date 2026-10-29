@@ -3,7 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sequelize, SuperAdmin, Negocio, ClienteCapturado } from './models/index.js';
+import { sequelize } from './models/index.js';
 import redirectRouter from './routes/redirect.js';
 import stripeWebhook from './routes/webhooks/stripe.js';
 import revolutWebhook from './routes/webhooks/revolut.js';
@@ -37,14 +37,16 @@ app.use(cors({
 app.use('/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhook);
 app.use('/webhooks/revolut', express.raw({ type: 'application/json' }), revolutWebhook);
 
-// WhatsApp puede usar JSON normal
-app.use('/webhooks/whatsapp-bot', express.json(), whatsappWebhook);
+// WhatsApp: JSON normal, pero guardamos el cuerpo original (req.rawBody)
+// porque la firma X-Hub-Signature-256 se calcula sobre esos bytes exactos.
+app.use('/webhooks/whatsapp-bot', express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; }
+}), whatsappWebhook);
 
 // ────────────────────────────────────────────────
 // Resto de la app (JSON normal)
 // ────────────────────────────────────────────────
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
 app.use(express.urlencoded({ extended: true }));
 
 // API de autenticación y paneles (Fase 5)
@@ -63,7 +65,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     phase: '1 + 2 – DB + Redirect + Payments + WhatsApp Bot',
-    db: 'SQLite',
+    db: sequelize.getDialect(),
     timestamp: new Date().toISOString()
   });
 });
@@ -120,80 +122,6 @@ app.get('/', (req, res) => {
     </html>
   `);
 });
-app.get('/api/dev/activar', async (req, res) => {
-  try {
-    if (req.query.key !== 'qr-activar-2026') {
-      return res.status(403).json({ error: 'Clave incorrecta' });
-    }
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@qrsas.es';
-    let admin = await SuperAdmin.findOne({ where: { email: adminEmail } });
-    if (!admin) {
-      admin = await SuperAdmin.create({
-        email: adminEmail,
-        password_hash: 'Admin123!',
-        nombre: 'Super Admin'
-      });
-    }
-    const [n] = await Negocio.update(
-      { estado_suscripcion: 'Activo', fecha_activacion: new Date() },
-      { where: { estado_suscripcion: 'Pendiente_Impresion' } }
-    );
-    res.json({
-      ok: true,
-      admin: admin.email,
-      negocios_activados: n,
-      mensaje: 'Listo. Entra al panel del negocio: el estado debe ser Activo.'
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-app.get('/api/dev/clientes-prueba', async (req, res) => {
-  try {
-    if (req.query.key !== 'qr-activar-2026') {
-      return res.status(403).json({ error: 'Clave incorrecta' });
-    }
-    const negocios = await Negocio.findAll();
-    if (!negocios.length) {
-      return res.json({ ok: false, mensaje: 'No hay negocios. Regístrate primero.' });
-    }
-    const muestras = [
-      { telefono_cliente: '34600111222', nombre_perfil_whatsapp: 'Cliente Demo 1' },
-      { telefono_cliente: '34600333444', nombre_perfil_whatsapp: 'María Prueba' },
-      { telefono_cliente: '34600555666', nombre_perfil_whatsapp: 'Carlos Test' }
-    ];
-    let creados = 0;
-    for (const neg of negocios) {
-      for (const m of muestras) {
-        const [row, created] = await ClienteCapturado.findOrCreate({
-          where: { negocio_id: neg.id, telefono_cliente: m.telefono_cliente },
-          defaults: {
-            negocio_id: neg.id,
-            telefono_cliente: m.telefono_cliente,
-            nombre_perfil_whatsapp: m.nombre_perfil_whatsapp,
-            ultima_interaccion: new Date(),
-            veces_interactuado: 1
-          }
-        });
-        if (!created) {
-          await row.update({
-            ultima_interaccion: new Date(),
-            veces_interactuado: (row.veces_interactuado || 1) + 1
-          });
-        }
-        creados++;
-      }
-    }
-    res.json({
-      ok: true,
-      contactos_creados: creados,
-      mensaje: 'Clientes de prueba listos. Abre Clientes y pulsa Ctrl+F5.'
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 // Motor de redirección
 app.use('/r', redirectRouter);
 
@@ -205,7 +133,7 @@ app.use((req, res) => {
 async function start() {
   try {
     await sequelize.authenticate();
-    console.log('✅ Conexión a SQLite establecida');
+    console.log(`✅ Conexión a la base de datos establecida (${sequelize.getDialect()})`);
 
     await sequelize.sync({ alter: true });
     console.log('✅ Modelos sincronizados');

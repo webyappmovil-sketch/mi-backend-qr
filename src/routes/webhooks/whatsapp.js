@@ -11,15 +11,45 @@
  */
 
 import { Router } from 'express';
-import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { Negocio, ConfiguracionQR, ClienteCapturado } from '../../models/index.js';
 import { enviarMensajeTexto, enviarMensajeConEnlace } from '../../services/whatsapp.js';
-
-dotenv.config();
+import { isProduction } from '../../config/env.js';
 
 const router = Router();
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'mi_token_de_verificacion_seguro';
+// Token de verificación del webhook (lo eliges tú y lo pegas igual en Meta).
+// Si no está definido en producción, el bot queda DESACTIVADO: el servidor arranca
+// con normalidad pero el webhook rechaza todo (verificación y mensajes).
+function tokenVerificacion() {
+  return process.env.WHATSAPP_VERIFY_TOKEN ||
+    (isProduction ? null : 'mi_token_de_verificacion_seguro'); // valor por defecto solo en local
+}
+
+/**
+ * Valida la firma X-Hub-Signature-256 que Meta añade a cada POST.
+ * Se calcula con el "App Secret" de la app de Meta (WHATSAPP_APP_SECRET)
+ * sobre el cuerpo SIN modificar (req.rawBody, guardado en app.js).
+ */
+function firmaValida(req) {
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+  if (!appSecret) {
+    if (isProduction) {
+      console.error('[WhatsApp] Falta WHATSAPP_APP_SECRET: mensaje rechazado');
+      return false;
+    }
+    return true; // solo en local, para poder probar sin firma
+  }
+
+  const recibida = Buffer.from(req.get('x-hub-signature-256') || '');
+  const esperada = Buffer.from(
+    'sha256=' +
+      crypto.createHmac('sha256', appSecret).update(req.rawBody || Buffer.alloc(0)).digest('hex')
+  );
+
+  return recibida.length === esperada.length && crypto.timingSafeEqual(recibida, esperada);
+}
 
 /**
  * GET – Verificación del webhook (Meta lo llama al configurar)
@@ -30,7 +60,8 @@ router.get('/', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+  const esperado = tokenVerificacion();
+  if (esperado && mode === 'subscribe' && token === esperado) {
     console.log('[WhatsApp] Webhook verificado correctamente');
     return res.status(200).send(challenge);
   }
@@ -43,6 +74,12 @@ router.get('/', (req, res) => {
  * POST – Mensajes entrantes
  */
 router.post('/', async (req, res) => {
+  // Rechazar cualquier petición que no venga firmada por Meta
+  if (!firmaValida(req)) {
+    console.warn('[WhatsApp] Firma inválida: petición rechazada');
+    return res.sendStatus(401);
+  }
+
   // Respondemos 200 inmediatamente para que Meta no reintente
   res.sendStatus(200);
 
