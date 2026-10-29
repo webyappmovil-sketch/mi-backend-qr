@@ -100,7 +100,7 @@
 
         let mode = 'login';
     const codigoInvitacion = (new URLSearchParams(location.search).get('v') || '').trim().toUpperCase();
-
+    const planElegido = new URLSearchParams(location.search).get('plan') || 'Starter';
     function irPanel(user) {
       if (user.role === 'admin') location.href = 'admin.html';
       else if (user.role === 'vendedor') location.href = 'vendedor.html';
@@ -155,7 +155,7 @@
             body = { nombre, email, password, telefono };
           } else {
             path = '/api/auth/registro';
-            body = { nombre_empresa: nombre, email, password, telefono_whatsapp: telefono, codigo_vendedor: codigoInvitacion };
+                        body = { nombre_empresa: nombre, email, password, telefono_whatsapp: telefono, codigo_vendedor: codigoInvitacion, plan: planElegido };
           }
         } else {
           path = '/api/auth/login';
@@ -207,6 +207,14 @@
             aviso.classList.remove('hidden');
           }
         });
+    }
+     if (planElegido === 'Pro' || planElegido === 'Business') {
+      setMode('registro');
+      const avisoPlan = document.getElementById('aviso-codigo');
+      avisoPlan.textContent = planElegido === 'Pro'
+        ? 'Cuenta del Plan Pro: 19,99 € al mes.'
+        : 'Cuenta del Plan Business: 29,99 € al mes.';
+      avisoPlan.classList.remove('hidden');
     }
   </script>
 </body>
