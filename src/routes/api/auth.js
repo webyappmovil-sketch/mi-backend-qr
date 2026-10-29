@@ -67,7 +67,7 @@ router.post('/registro', async (req, res) => {
       password_hash: password, // se hashea en el hook beforeCreate
       telefono_whatsapp: phoneClean,
       vendedor_id: vendedorId,
-      plan_actual: 'Starter',
+           plan_actual: ['Pro', 'Business'].includes(req.body.plan) ? req.body.plan : 'Starter',
       estado_suscripcion: 'Pendiente_Impresion'
     });
 
