@@ -6,6 +6,7 @@
  */
 
 import { Router } from 'express';
+import { calcularFinPrueba } from '../../services/planes.js';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import { Negocio, SuperAdmin, ConfiguracionQR, Vendedor, PedidoImpresion } from '../../models/index.js';
@@ -61,14 +62,19 @@ router.post('/registro', async (req, res) => {
       vendedorId = vendedor.id;
     }
 
+    const planElegido = ['Pro', 'Business'].includes(req.body.plan) ? req.body.plan : 'Starter';
     const negocio = await Negocio.create({
       nombre_empresa: nombre_empresa.trim(),
       email: email.toLowerCase().trim(),
       password_hash: password, // se hashea en el hook beforeCreate
       telefono_whatsapp: phoneClean,
       vendedor_id: vendedorId,
-           plan_actual: ['Pro', 'Business'].includes(req.body.plan) ? req.body.plan : 'Starter',
-      estado_suscripcion: 'Pendiente_Impresion'
+      plan_actual: planElegido,
+      // Plan gratuito: el QR funciona desde el registro durante 60 días.
+      // Pro/Business siguen pendientes hasta que se complete el pago.
+      estado_suscripcion: planElegido === 'Starter' ? 'Activo' : 'Pendiente_Impresion',
+      fecha_activacion: planElegido === 'Starter' ? new Date() : null,
+      prueba_fin: planElegido === 'Starter' ? calcularFinPrueba() : null
     });
 
     // Crear QR por defecto vacío

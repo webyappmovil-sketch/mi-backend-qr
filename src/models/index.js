@@ -6,6 +6,7 @@ import PedidoImpresion from './PedidoImpresion.js';
 import ClienteCapturado from './ClienteCapturado.js';
 import Escaneo from './Escaneo.js';
 import Vendedor from './Vendedor.js';
+import Participacion from './Participacion.js';
 // Relaciones
 Negocio.hasMany(ConfiguracionQR, { foreignKey: 'negocio_id', as: 'qrs' });
 ConfiguracionQR.belongsTo(Negocio, { foreignKey: 'negocio_id', as: 'negocio' });
@@ -20,6 +21,10 @@ Negocio.hasMany(Escaneo, { foreignKey: 'negocio_id', as: 'escaneos' });
 Escaneo.belongsTo(Negocio, { foreignKey: 'negocio_id', as: 'negocio' });
 ConfiguracionQR.hasMany(Escaneo, { foreignKey: 'qr_id', as: 'escaneos' });
 Escaneo.belongsTo(ConfiguracionQR, { foreignKey: 'qr_id', as: 'qr' });
+Negocio.hasMany(Participacion, { foreignKey: 'negocio_id', as: 'participaciones' });
+Participacion.belongsTo(Negocio, { foreignKey: 'negocio_id', as: 'negocio' });
+ConfiguracionQR.hasMany(Participacion, { foreignKey: 'qr_id', as: 'participaciones' });
+Participacion.belongsTo(ConfiguracionQR, { foreignKey: 'qr_id', as: 'qr' });
 Vendedor.hasMany(Negocio, { foreignKey: 'vendedor_id', as: 'negocios' });
 Negocio.belongsTo(Vendedor, { foreignKey: 'vendedor_id', as: 'vendedor' });
 export {
@@ -30,5 +35,6 @@ export {
   PedidoImpresion,
   ClienteCapturado,
     Escaneo,
-  Vendedor
+  Vendedor,
+  Participacion
 };

@@ -8,7 +8,12 @@
 import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireNegocio } from '../../middleware/auth.js';
-import { Negocio, ConfiguracionQR, ClienteCapturado, Escaneo } from '../../models/index.js';
+import { Negocio, ConfiguracionQR, ClienteCapturado, Escaneo, Participacion } from '../../models/index.js';
+import { reglasPlan, tipoPermitido, estadoPrueba, TIPOS_QR, DIAS_PRUEBA } from '../../services/planes.js';
+import {
+  validarUrlDestino, validarDatosRuleta, validarDatosEnlaces, validarDatosTexto,
+  datosRuletaPorDefecto, estadoPremio
+} from '../../services/ruleta.js';
 
 const router = Router();
 
@@ -278,6 +283,203 @@ router.get('/metricas', async (req, res) => {
   } catch (error) {
     console.error('[Metricas]', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+
+/* ═════════════ Plan, QR y participantes ═════════════ */
+
+function infoPlan(negocio, usados) {
+  const reglas = reglasPlan(negocio.plan_actual);
+  const prueba = estadoPrueba(negocio);
+  return {
+    plan: negocio.plan_actual,
+    nombre_plan: reglas.nombre,
+    max_qr: reglas.maxQR,
+    qr_usados: usados,
+    tipos_permitidos: reglas.tipos,
+    ruleta: reglas.ruleta,
+    metricas_completas: reglas.metricas,
+    prueba: {
+      estado: prueba.estado,
+      dias_restantes: prueba.diasRestantes,
+      fin: prueba.fin || null,
+      cortesia_hasta: prueba.cortesiaHasta || null,
+      dias_totales: DIAS_PRUEBA
+    }
+  };
+}
+
+function qrPublico(q) {
+  return {
+    id: q.id,
+    nombre: q.nombre_interno,
+    tipo_destino: q.tipo_destino,
+    url_destino: q.url_destino,
+    mensaje: (() => { try { return decodeURIComponent(q.mensaje_opciones_encoded || ''); } catch { return q.mensaje_opciones_encoded || ''; } })(),
+    datos: q.datos || null,
+    escaneos: q.contador_escaneos,
+    creado: q.created_at
+  };
+}
+
+/** Lo que cada tipo necesita guardar. Devuelve { campos } o { error } */
+function camposSegunTipo(tipo, body) {
+  if (tipo === 'WhatsApp') {
+    const mensaje = String(body.mensaje || '').trim().slice(0, 1000);
+    return { campos: { mensaje_opciones_encoded: encodeURIComponent(mensaje), url_destino: null, datos: null } };
+  }
+  if (tipo === 'Enlace') {
+    const url = validarUrlDestino(body.url_destino);
+    if (!url) return { error: 'Escribe una dirección web válida que empiece por https://' };
+    return { campos: { mensaje_opciones_encoded: '', url_destino: url, datos: null } };
+  }
+  if (tipo === 'Enlaces') {
+    const r = validarDatosEnlaces(body.datos);
+    return r.error ? r : { campos: { mensaje_opciones_encoded: '', url_destino: null, datos: r.datos } };
+  }
+  if (tipo === 'Texto') {
+    const r = validarDatosTexto(body.datos);
+    return r.error ? r : { campos: { mensaje_opciones_encoded: '', url_destino: null, datos: r.datos } };
+  }
+  if (tipo === 'Ruleta') {
+    const r = validarDatosRuleta(body.datos || datosRuletaPorDefecto());
+    return r.error ? r : { campos: { mensaje_opciones_encoded: '', url_destino: null, datos: r.datos } };
+  }
+  return { error: 'Tipo de QR no válido' };
+}
+
+async function bloquearSiPruebaTerminada(req, res, next) {
+  const negocio = await Negocio.findByPk(req.user.id);
+  if (estadoPrueba(negocio).pausado) {
+    return res.status(403).json({ error: 'Tu prueba gratuita terminó. Mejora tu plan para volver a editar tus QR.' });
+  }
+  req.negocio = negocio;
+  next();
+}
+
+/** GET /api/negocio/qrs → lista de QR + información del plan */
+router.get('/qrs', async (req, res) => {
+  try {
+    const negocio = await Negocio.findByPk(req.user.id);
+    const qrs = await ConfiguracionQR.findAll({
+      where: { negocio_id: req.user.id, activo: true },
+      order: [['created_at', 'ASC']]
+    });
+    res.json({ qrs: qrs.map(qrPublico), plan: infoPlan(negocio, qrs.length), estado: negocio.estado_suscripcion, telefono_whatsapp: negocio.telefono_whatsapp });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /api/negocio/qrs → crear QR (respeta tipo y límite del plan) */
+router.post('/qrs', bloquearSiPruebaTerminada, async (req, res) => {
+  try {
+    const negocio = req.negocio;
+    const tipo = String(req.body.tipo_destino || '');
+    if (!TIPOS_QR.includes(tipo)) return res.status(400).json({ error: 'Tipo de QR no válido' });
+
+    if (!tipoPermitido(negocio.plan_actual, tipo)) {
+      return res.status(403).json({ error: 'Este tipo de QR está disponible desde el plan Pro.', codigo: 'plan' });
+    }
+    const reglas = reglasPlan(negocio.plan_actual);
+    const usados = await ConfiguracionQR.count({ where: { negocio_id: negocio.id, activo: true } });
+    if (usados >= reglas.maxQR) {
+      return res.status(403).json({
+        error: `Has llegado al límite de tu plan (${reglas.maxQR} ${reglas.maxQR === 1 ? 'QR' : 'QR'}). Mejora tu plan para crear más.`,
+        codigo: 'limite'
+      });
+    }
+
+    const r = camposSegunTipo(tipo, req.body);
+    if (r.error) return res.status(400).json({ error: r.error });
+
+    const qr = await ConfiguracionQR.create({
+      negocio_id: negocio.id,
+      tipo: negocio.plan_actual === 'Starter' ? 'Estatico' : 'Dinamico',
+      tipo_destino: tipo,
+      nombre_interno: String(req.body.nombre || '').trim().slice(0, 100) || `QR ${usados + 1}`,
+      mapeo_respuestas: {},
+      ...r.campos
+    });
+    res.status(201).json({ ok: true, qr: qrPublico(qr) });
+  } catch (error) {
+    console.error('[QR crear]', error);
+    res.status(500).json({ error: 'No se pudo crear el QR' });
+  }
+});
+
+/** PUT /api/negocio/qrs/:id → editar (el tipo no cambia) */
+router.put('/qrs/:id', bloquearSiPruebaTerminada, async (req, res) => {
+  try {
+    const qr = await ConfiguracionQR.findOne({ where: { id: req.params.id, negocio_id: req.user.id, activo: true } });
+    if (!qr) return res.status(404).json({ error: 'QR no encontrado' });
+
+    const r = camposSegunTipo(qr.tipo_destino, req.body);
+    if (r.error) return res.status(400).json({ error: r.error });
+
+    if (qr.tipo_destino === 'WhatsApp' && req.body.telefono_whatsapp) {
+      const tel = String(req.body.telefono_whatsapp).replace(/\D/g, '');
+      if (tel.length < 9) return res.status(400).json({ error: 'Teléfono de WhatsApp inválido' });
+      await req.negocio.update({ telefono_whatsapp: tel });
+    }
+    await qr.update({
+      nombre_interno: String(req.body.nombre || '').trim().slice(0, 100) || qr.nombre_interno,
+      ...r.campos
+    });
+    res.json({ ok: true, qr: qrPublico(qr) });
+  } catch (error) {
+    console.error('[QR editar]', error);
+    res.status(500).json({ error: 'No se pudo guardar' });
+  }
+});
+
+/** DELETE /api/negocio/qrs/:id → desactiva (no borra datos ni participantes) */
+router.delete('/qrs/:id', bloquearSiPruebaTerminada, async (req, res) => {
+  try {
+    const qr = await ConfiguracionQR.findOne({ where: { id: req.params.id, negocio_id: req.user.id, activo: true } });
+    if (!qr) return res.status(404).json({ error: 'QR no encontrado' });
+    await qr.update({ activo: false });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'No se pudo eliminar' });
+  }
+});
+
+/** GET /api/negocio/participaciones → clientes captados por la ruleta */
+router.get('/participaciones', async (req, res) => {
+  try {
+    const filas = await Participacion.findAll({
+      where: { negocio_id: req.user.id },
+      order: [['created_at', 'DESC']],
+      limit: 1000
+    });
+    const ahora = new Date();
+    res.json({
+      participaciones: filas.map(p => ({
+        id: p.id, origen: p.origen, nombre: p.nombre, apellido: p.apellido, telefono: p.telefono,
+        premio: p.es_premio ? p.premio_texto : (p.origen === 'Ruleta' ? 'Sin premio' : null),
+        codigo: p.codigo, estado: estadoPremio(p, ahora), valido_hasta: p.valido_hasta,
+        acepta_promos: p.consentimiento, fecha: p.created_at
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** PUT /api/negocio/participaciones/:id/canjear → marca el premio como canjeado */
+router.put('/participaciones/:id/canjear', async (req, res) => {
+  try {
+    const p = await Participacion.findOne({ where: { id: req.params.id, negocio_id: req.user.id } });
+    if (!p || !p.es_premio) return res.status(404).json({ error: 'Premio no encontrado' });
+    const estado = estadoPremio(p);
+    if (estado === 'Canjeado') return res.status(409).json({ error: 'Este premio ya estaba canjeado' });
+    if (estado === 'Caducado') return res.status(409).json({ error: 'Este premio caducó: solo era válido el día en que se ganó' });
+    await p.update({ canjeado_en: new Date() });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: 'No se pudo canjear' });
   }
 });
 

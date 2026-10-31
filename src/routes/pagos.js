@@ -96,8 +96,9 @@ router.post('/crear-sesion-suscripcion', async (req, res) => {
       cancel_url: cancel_url || `${process.env.APP_BASE_URL}/pago-cancelado.html`
     });
 
-    // Actualizamos el plan del negocio (el estado se activa vía webhook)
-    await negocio.update({ plan_actual: plan });
+    // El plan NO se cambia aquí: se actualiza en el webhook de Stripe cuando el pago
+    // se completa de verdad. Si se cambiara antes, alguien con cuenta gratuita activa
+    // podría quedarse con Pro sin pagar simplemente cerrando la ventana de Stripe.
 
     res.json({
       sessionId: session.id,

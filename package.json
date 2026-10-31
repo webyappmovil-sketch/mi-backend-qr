@@ -10,7 +10,8 @@
     "db:reset": "rm -f database.sqlite && node scripts/seed.js",
     "test:flow": "node scripts/test-flow.js",
     "test:all": "npm run db:reset && npm run test:flow",
-    "admin:crear": "node scripts/crear-admin.js"
+    "admin:crear": "node scripts/crear-admin.js",
+    "test:ruleta": "node scripts/test-ruleta.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

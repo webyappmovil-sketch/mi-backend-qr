@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard – QR SaaS</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="js/motor.js"></script>
+  <script src="js/qrcode-generator.js"></script>
+  <script src="js/qrlocal.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     tailwind.config = {
@@ -47,63 +48,26 @@
     </div>
   </div>
 
+  <div id="banner-prueba" class="hidden"></div>
+
   <main class="max-w-6xl mx-auto px-4 py-6">
     <div class="flex gap-2 mb-6 overflow-x-auto pb-1">
-      <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold" data-tab="qr" onclick="cambiarTab('qr')">📱 Configurar QR</button>
+      <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold" data-tab="qr" onclick="cambiarTab('qr')">📱 Mis QR</button>
       <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="clientes" onclick="cambiarTab('clientes')">👥 Clientes</button>
       <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="metricas" onclick="cambiarTab('metricas')">📊 Métricas</button>
     </div>
 
     <!-- TAB QR -->
     <section id="tab-qr" class="tab-content">
-      <div class="grid lg:grid-cols-2 gap-6">
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6">
-          <h2 class="font-bold text-lg mb-4">Configuración del QR</h2>
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">WhatsApp comercial (sin +)</label>
-              <input type="text" id="wa-telefono" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="34600111222">
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Mensaje de bienvenida</label>
-              <textarea id="wa-mensaje" rows="4" class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
-            </div>
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <label class="text-sm font-medium">Opciones del menú (1, 2, 3…)</label>
-                <button type="button" onclick="anadirOpcion()" class="text-xs font-semibold text-brand-600">+ Añadir</button>
-              </div>
-              <div id="opciones-container" class="space-y-3"></div>
-            </div>
-            <button onclick="guardarConfig()" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl transition">
-              Guardar configuración
-            </button>
-          </div>
-        </div>
-
-        <div class="bg-white rounded-2xl border border-slate-200 p-5 md:p-6 flex flex-col items-center">
-          <h2 class="font-bold text-lg mb-4 self-start">Tu Código QR</h2>
-          <div class="bg-slate-50 rounded-xl p-6 flex items-center justify-center min-h-[260px] w-full relative">
-            <canvas id="qr-canvas" class="hidden"></canvas>
-            <p id="qr-placeholder" class="text-slate-400 text-sm text-center">Guarda la configuración para generar el QR</p>
-            <div id="qr-lock" class="hidden absolute inset-0 bg-white/80 rounded-xl flex flex-col items-center justify-center p-4">
-              <p class="text-amber-700 font-semibold text-sm text-center mb-2">🔒 Bloqueado hasta activar</p>
-              <button onclick="abrirModalImpresion()" class="text-xs font-semibold bg-amber-500 text-white px-3 py-1.5 rounded-lg">Pagar impresión</button>
-            </div>
-          </div>
-          <p id="qr-url" class="text-xs text-slate-400 mt-3 break-all text-center"></p>
-          <button id="btn-descargar-qr" onclick="descargarQR()" class="mt-4 hidden w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-2.5 rounded-xl text-sm">
-            Descargar QR HD
-          </button>
-        </div>
-      </div>
+      <div id="qr-panel"><p class="text-slate-400 text-center py-10">Cargando tus QR…</p></div>
     </section>
 
     <!-- TAB CLIENTES -->
     <section id="tab-clientes" class="tab-content hidden">
+      <div id="panel-participantes"></div>
       <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
-          <h2 class="font-bold text-lg">Contactos capturados</h2>
+          <h2 class="font-bold text-lg">Contactos de WhatsApp</h2>
           <button onclick="exportarCSV()" class="text-sm font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 px-4 py-2 rounded-lg">📥 Exportar CSV</button>
         </div>
         <div class="overflow-x-auto">
@@ -160,8 +124,22 @@
   <div id="modal-impresion" class="fixed inset-0 bg-black/40 z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl relative">
       <button onclick="cerrarModalImpresion()" class="absolute top-4 right-4 text-slate-400 text-xl">&times;</button>
-      <h2 class="text-xl font-bold mb-1">Activa tu cuenta</h2>
-            <p class="text-sm text-slate-500 mb-5">Elige impresión física o un plan mensual. Al pagar, tu QR se activa al instante.</p>
+      <h2 id="modal-titulo" class="text-xl font-bold mb-1">Activa tu cuenta</h2>
+            <p id="modal-sub" class="text-sm text-slate-500 mb-3">Elige impresión física o un plan mensual. Al pagar, tu QR se activa al instante.</p>
+      <details class="mb-4 text-sm">
+        <summary class="cursor-pointer font-semibold text-brand-700">Comparar planes</summary>
+        <div class="overflow-x-auto mt-2 border border-slate-200 rounded-xl">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600"><tr><th class="px-2 py-2"></th><th class="px-2 py-2">Gratuito</th><th class="px-2 py-2">Pro</th><th class="px-2 py-2">Business</th></tr></thead>
+            <tbody class="divide-y divide-slate-100 text-slate-700">
+              <tr><td class="px-2 py-2 font-medium">QR</td><td class="px-2 py-2">1</td><td class="px-2 py-2">5</td><td class="px-2 py-2">50</td></tr>
+              <tr><td class="px-2 py-2 font-medium">Tipos de QR</td><td class="px-2 py-2">Solo enlace directo</td><td class="px-2 py-2">Todos</td><td class="px-2 py-2">Todos</td></tr>
+              <tr><td class="px-2 py-2 font-medium">Ruleta y captación</td><td class="px-2 py-2">No</td><td class="px-2 py-2">Sí</td><td class="px-2 py-2">Sí</td></tr>
+              <tr><td class="px-2 py-2 font-medium">Métricas y alertas</td><td class="px-2 py-2">Solo contador</td><td class="px-2 py-2">Sí</td><td class="px-2 py-2">Sí</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       <div class="space-y-3 mb-5">
         <label class="flex items-center gap-3 p-4 border-2 border-slate-200 rounded-xl cursor-pointer hover:border-brand-500 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
@@ -223,6 +201,7 @@
   </div>
 
   <script src="js/app.js"></script>
+  <script src="js/qrs.js"></script>
   <script>
        let user = Auth.requireAuth('negocio');
     if (user.estado === 'Suspendido') {
@@ -230,13 +209,12 @@
       location.replace('login.html');
     }
     let qrId = user?.qrId || null;
-    let opciones = [{ texto: 'Ver información', valor: 'Info' }, { texto: 'Contactar', valor: 'humano' }];
     let chartInstance = null;
     let contactosCache = [];
 
     // UI inicial
     document.getElementById('nombre-negocio').textContent = user.nombre || user.email;
-    document.getElementById('badge-plan').textContent = user.plan || 'Starter';
+    document.getElementById('badge-plan').textContent = ({ Starter: 'Gratuito' })[user.plan] || user.plan || 'Gratuito';
     actualizarBadgeEstado(user.estado);
 
     function actualizarBadgeEstado(estado) {
@@ -259,149 +237,25 @@
       document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
       document.getElementById('tab-' + id).classList.remove('hidden');
       document.querySelector(`[data-tab="${id}"]`).classList.add('active');
-      if (id === 'clientes') cargarClientes();
+      if (id === 'qr') QRS.cargar();
+      if (id === 'clientes') { cargarClientes(); QRS.cargarParticipantes(); }
       if (id === 'metricas') cargarMetricas();
     }
 
-    // Opciones
-    function renderOpciones() {
-      document.getElementById('opciones-container').innerHTML = opciones.map((op, i) => `
-        <div class="flex gap-2 items-start">
-          <span class="mt-2.5 text-xs font-bold text-brand-600 w-5">${i + 1}.</span>
-          <input type="text" value="${esc(op.texto)}" onchange="opciones[${i}].texto=this.value"
-            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="Texto">
-          <input type="text" value="${esc(op.valor)}" onchange="opciones[${i}].valor=this.value"
-            class="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="URL o texto">
-          <button onclick="opciones.splice(${i},1);renderOpciones()" class="mt-1.5 text-slate-400 hover:text-red-500 text-lg">&times;</button>
-        </div>
-      `).join('');
-    }
-    function anadirOpcion() {
-      if (opciones.length >= 9) return toast('Máximo 9 opciones', 'error');
-      opciones.push({ texto: '', valor: '' });
-      renderOpciones();
-    }
-    function esc(s) { return String(s || '').replace(/"/g, '&quot;'); }
-
-    // Cargar config del backend
-    async function cargarConfig() {
-      try {
-        const data = await API.getConfigQR();
-        if (data.negocio) {
-          user = Auth.updateUser({
-            estado: data.negocio.estado_suscripcion,
-            plan: data.negocio.plan_actual,
-            telefono: data.negocio.telefono_whatsapp,
-            nombre: data.negocio.nombre_empresa
-          });
-          actualizarBadgeEstado(user.estado);
-          document.getElementById('badge-plan').textContent = user.plan;
-        }
-        if (data.qr) {
-          qrId = data.qr.id;
-          Auth.updateUser({ qrId });
-          document.getElementById('wa-telefono').value = data.negocio?.telefono_whatsapp || '';
-          document.getElementById('wa-mensaje').value = data.qr.mensaje || '';
-          // Reconstruir opciones desde mapeo
-          const mapeo = data.qr.mapeo_respuestas || {};
-          const keys = Object.keys(mapeo).sort();
-          if (keys.length) {
-            opciones = keys.map(k => ({ texto: `Opción ${k}`, valor: mapeo[k] }));
-          }
-          renderOpciones();
-          generarQRVisual();
-        } else {
-          document.getElementById('wa-telefono').value = user.telefono || '';
-          document.getElementById('wa-mensaje').value = `¡Hola! 👋 Bienvenido a *${user.nombre || 'mi negocio'}*\n\nElige una opción:`;
-          renderOpciones();
-        }
-      } catch (err) {
-        toast('Error cargando config: ' + err.message, 'error');
-        renderOpciones();
-      }
+    // Mejorar plan: abre el modal con Pro preseleccionado
+    function abrirMejora() {
+      abrirModalImpresion();
+      const radio = document.querySelector('input[name="material"][value="Pro"]');
+      if (radio) { radio.checked = true; alElegirPlan(); }
     }
 
-    async function guardarConfig() {
-      const telefono = document.getElementById('wa-telefono').value.trim().replace(/\D/g, '');
-      let mensaje = document.getElementById('wa-mensaje').value.trim();
-      if (!telefono || telefono.length < 9) return toast('Teléfono WhatsApp inválido', 'error');
-
-      // Añadir opciones al mensaje si no están
-      opciones.forEach((op, i) => {
-        if (op.texto && !mensaje.includes(`${i + 1}`)) {
-          mensaje += `\n${i + 1}️⃣ ${op.texto}`;
-        }
-      });
-
-      const mapeo = {};
-      opciones.forEach((op, i) => { if (op.valor) mapeo[String(i + 1)] = op.valor; });
-
-      try {
-        const data = await API.saveConfigQR({
-          telefono_whatsapp: telefono,
-          mensaje,
-          mapeo_respuestas: mapeo
-        });
-        qrId = data.qr.id;
-        Auth.updateUser({ qrId, telefono, estado: data.estado });
-        document.getElementById('wa-mensaje').value = mensaje;
-        generarQRVisual();
-        toast('Configuración guardada', 'success');
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    }
- 
- function generarQRVisual() {
-  if (!qrId) return;
-
-  const telefonoLimpio = (document.getElementById('qr-whatsapp')?.value || '').trim();
-const mensajeLimpio = encodeURIComponent(document.getElementById('qr-message')?.value || '');
-const url = redirectUrl(qrId);
-  const contenedor = document.getElementById('qr-placeholder');
-  if (!contenedor) return;
-
-  contenedor.innerHTML = '';
-
-  // Usamos la API de qrserver (funciona bien)
-  const img = document.createElement('img');
-  img.id = 'qr-image-real';
-  img.className = 'mx-auto block';
-  img.alt = 'Código QR';
-  img.width = 300;
-  img.height = 300;
-  img.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
-
-  img.onerror = function() {
-    contenedor.innerHTML = '<p class="text-red-500 text-center">Error al generar el QR. Revisa la consola.</p>';
-  };
-
-  contenedor.appendChild(img);
-
-  // Actualizamos la URL visible
-  const urlElement = document.getElementById('qr-url');
-  if (urlElement) urlElement.textContent = url;
-
-  // Mostramos el botón de descargar
-  const btnDescargar = document.getElementById('btn-descargar-qr');
-  if (btnDescargar) btnDescargar.classList.remove('hidden');
-}
-
-function descargarQR() {
-  const img = document.getElementById('qr-image-real');
-  if (!img || !img.src) {
-    toast('Primero genera el QR', 'error');
-    return;
-  }
-
-  const a = document.createElement('a');
-  a.download = `qr-${Auth.getUser()?.nombre || 'negocio'}.png`;
-  a.href = img.src;
-  a.click();
-}
-   
     // Modal impresión
         function abrirModalImpresion() {
+      const activo = (Auth.getUser()?.estado || user.estado) === 'Activo';
+      document.getElementById('modal-titulo').textContent = activo ? 'Mejora tu plan' : 'Activa tu cuenta';
+      document.getElementById('modal-sub').textContent = activo
+        ? 'Elige un plan mensual para desbloquear la ruleta y más QR. También puedes pedir la impresión de tu QR.'
+        : 'Elige impresión física o un plan mensual. Al pagar, tu QR se activa al instante.';
       document.getElementById('modal-impresion').classList.remove('hidden');
       document.getElementById('modal-impresion').classList.add('flex');
       if (user.plan === 'Pro' || user.plan === 'Business') {
@@ -582,7 +436,7 @@ function descargarQR() {
     }
 
     // Init
-    cargarConfig();
+    QRS.cargar();
   </script>
 </body>
 </html>

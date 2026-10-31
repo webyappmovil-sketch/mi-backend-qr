@@ -208,6 +208,12 @@
           }
         });
     }
+     if (planElegido === 'Starter' && new URLSearchParams(location.search).has('plan')) {
+      setMode('registro');
+      const avisoGratis = document.getElementById('aviso-codigo');
+      avisoGratis.textContent = 'Plan gratuito: tu QR funciona desde el registro durante 60 días.';
+      avisoGratis.classList.remove('hidden');
+    }
      if (planElegido === 'Pro' || planElegido === 'Business') {
       setMode('registro');
       const avisoPlan = document.getElementById('aviso-codigo');

@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { sequelize } from './models/index.js';
 import redirectRouter from './routes/redirect.js';
+import publicoRouter from './routes/publico.js';
+import { iniciarAvisosPrueba } from './services/pruebaGratuita.js';
 import stripeWebhook from './routes/webhooks/stripe.js';
 import revolutWebhook from './routes/webhooks/revolut.js';
 import whatsappWebhook from './routes/webhooks/whatsapp.js';
@@ -18,6 +20,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config();
 
 const app = express();
+
+// Render (y cualquier hosting) pone un proxy delante: sin esto req.ip sería siempre el del proxy
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 // CORS – permite frontend en Netlify / localhost
@@ -52,6 +57,7 @@ app.use(express.urlencoded({ extended: true }));
 // API de autenticación y paneles (Fase 5)
 app.use('/api/auth', authRouter);
 app.use('/api/negocio', negocioRouter);
+app.use('/api/publico', publicoRouter);
 app.use('/api/admin', adminRouter);
 
 // Endpoints de creación de sesiones de pago (Stripe Checkout)
@@ -139,6 +145,7 @@ async function start() {
     console.log('✅ Modelos sincronizados');
 
     app.listen(PORT, () => {
+      iniciarAvisosPrueba();
       console.log(`\n🚀 Servidor escuchando en http://localhost:${PORT}`);
       console.log(`🔗 Redirección:       GET  /r/:id_qr`);
       console.log(`🔐 Auth:              POST /api/auth/login | /registro`);

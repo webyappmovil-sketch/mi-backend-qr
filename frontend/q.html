@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Cargando…</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #f0fdf4; }
+    #rueda { transform-box: view-box; transform-origin: 150px 174px; }
+    @media (prefers-reduced-motion: reduce) { #rueda { transition-duration: .4s !important; } }
+    .btn { display:block; width:100%; text-align:center; font-weight:600; border-radius:.75rem; padding:.8rem 1rem; }
+    .btn-verde { background:#16a34a; color:#fff; } .btn-verde:hover { background:#15803d; }
+    .btn-verde:disabled { opacity:.6; }
+    .campo { width:100%; border:1px solid #e2e8f0; border-radius:.6rem; padding:.7rem .8rem; font-size:1rem; background:#fff; }
+    .campo:focus { outline:2px solid #22c55e; outline-offset:0; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800">
+  <main class="max-w-md mx-auto px-4 py-5">
+    <p id="negocio" class="text-center font-semibold text-slate-700 mb-3"></p>
+    <div id="contenido" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+      <p class="text-center text-slate-400 py-10">Cargando…</p>
+    </div>
+    <p class="text-center text-xs text-slate-400 mt-4">QR SaaS · España</p>
+  </main>
+
+<script>
+const ID = (location.pathname.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i) || [])[0] || new URLSearchParams(location.search).get('id');
+const $ = id => document.getElementById(id);
+const EMOJI = { whatsapp:'💬', pdf:'📄', web:'🌐', video:'▶️', catalogo:'📖', mapa:'📍', telefono:'📞', email:'✉️', otro:'🔗' };
+let D = null, rot = 0;
+
+function el(tag, cls, texto) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+function vaciar(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+function guardarLocal(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function leerLocal(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+
+async function pedir(ruta, opciones) {
+  const r = await fetch(ruta, opciones);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'No se pudo completar. Inténtalo de nuevo.');
+  return j;
+}
+
+/* ───────────── Piezas comunes ───────────── */
+function aviso(color, titulo, lineas) {
+  const caja = el('div', `rounded-xl border p-4 text-center ${color}`);
+  caja.appendChild(el('p', 'font-semibold text-lg', titulo));
+  (lineas || []).forEach(l => caja.appendChild(el('p', 'text-sm mt-1 opacity-90', l)));
+  return caja;
+}
+
+function listaEnlaces(enlaces, titulo) {
+  const cont = el('div', 'mt-5');
+  if (!enlaces || !enlaces.length) return cont;
+  if (titulo) cont.appendChild(el('p', 'text-sm text-slate-500 text-center mb-2', titulo));
+  const grid = el('div', 'grid gap-2');
+  enlaces.forEach(e => {
+    const a = el('a', 'flex items-center gap-3 border border-slate-200 rounded-xl px-4 py-3 hover:bg-slate-50');
+    a.href = e.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.appendChild(el('span', 'text-xl', EMOJI[e.icono] || EMOJI.otro));
+    a.appendChild(el('span', 'flex-1 font-medium', e.etiqueta));
+    a.appendChild(el('span', 'text-slate-400', '›'));
+    grid.appendChild(a);
+  });
+  cont.appendChild(grid);
+  return cont;
+}
+
+function mostrar(...nodos) {
+  const c = $('contenido'); vaciar(c); nodos.forEach(n => c.appendChild(n));
+}
+
+/* ───────────── Ruleta ───────────── */
+function dibujarRueda(casillas) {
+  const NS = 'http://www.w3.org/2000/svg', CX = 150, CY = 174, R = 138, A = 360 / casillas.length;
+  const pt = (a, r) => [CX + r * Math.sin(a * Math.PI / 180), CY - r * Math.cos(a * Math.PI / 180)];
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 300 320'); svg.setAttribute('class', 'w-full max-w-[300px] mx-auto block');
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Ruleta de premios');
+  const puntero = document.createElementNS(NS, 'polygon');
+  puntero.setAttribute('points', '136,2 164,2 150,34'); puntero.setAttribute('fill', '#0f172a');
+  const g = document.createElementNS(NS, 'g'); g.id = 'rueda';
+  g.style.transition = 'transform 4.2s cubic-bezier(.17,.67,.12,1)';
+  casillas.forEach((c, i) => {
+    const s = pt(i * A, R), e = pt((i + 1) * A, R);
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', `M${CX} ${CY} L${s[0].toFixed(1)} ${s[1].toFixed(1)} A${R} ${R} 0 0 1 ${e[0].toFixed(1)} ${e[1].toFixed(1)} Z`);
+    p.setAttribute('fill', c.color); p.setAttribute('stroke', '#fff'); p.setAttribute('stroke-width', '2');
+    g.appendChild(p);
+    const t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', CX); t.setAttribute('y', CY - R * 0.66); t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-size', '12'); t.setAttribute('font-weight', '600');
+    t.setAttribute('fill', c.color === '#EF9F27' ? '#412402' : '#fff');
+    t.setAttribute('transform', `rotate(${i * A + A / 2} ${CX} ${CY})`);
+    t.textContent = c.texto; g.appendChild(t);
+  });
+  const hub = document.createElementNS(NS, 'circle');
+  hub.setAttribute('cx', CX); hub.setAttribute('cy', CY); hub.setAttribute('r', 20);
+  hub.setAttribute('fill', '#fff'); hub.setAttribute('stroke', '#cbd5e1');
+  svg.append(puntero, g, hub);
+  return svg;
+}
+
+function girarHasta(indice, n) {
+  const A = 360 / n, centro = indice * A + A / 2, jitter = (Math.random() - .5) * A * .6;
+  rot = rot + 360 * 5 + (360 - (rot % 360)) - centro + jitter;
+  const g = $('rueda'); g.style.transform = `rotate(${rot}deg)`;
+  return new Promise(res => setTimeout(res, matchMedia('(prefers-reduced-motion: reduce)').matches ? 500 : 4400));
+}
+
+function campo(id, placeholder, tipo, extra) {
+  const i = el('input', 'campo'); i.id = id; i.type = tipo || 'text'; i.placeholder = placeholder;
+  i.maxLength = 60; Object.assign(i, extra || {}); return i;
+}
+
+function formularioDatos({ pedirApellido, textoBoton, onEnviar }) {
+  const f = el('div', 'grid gap-2.5');
+  f.appendChild(campo('f-nombre', 'Nombre', 'text', { autocomplete: 'given-name' }));
+  if (pedirApellido) f.appendChild(campo('f-apellido', 'Apellido', 'text', { autocomplete: 'family-name' }));
+  f.appendChild(campo('f-tel', 'Móvil (ej. 612 345 678)', 'tel', { autocomplete: 'tel', inputMode: 'tel', maxLength: 20 }));
+  const lab = el('label', 'flex gap-2 items-start text-xs text-slate-500 leading-relaxed');
+  const chk = el('input'); chk.type = 'checkbox'; chk.id = 'f-ok'; chk.className = 'mt-1'; // sin marcar por defecto
+  lab.append(chk, el('span', '', D.texto_consentimiento));
+  f.appendChild(lab);
+  const err = el('p', 'text-sm text-red-600 min-h-[1.25rem]'); err.id = 'f-err'; err.setAttribute('role', 'alert');
+  const btn = el('button', 'btn btn-verde', textoBoton);
+  btn.onclick = async () => {
+    err.textContent = '';
+    const datos = {
+      nombre: $('f-nombre').value.trim(),
+      apellido: pedirApellido ? $('f-apellido').value.trim() : undefined,
+      telefono: $('f-tel').value.trim(),
+      consentimiento: $('f-ok').checked
+    };
+    if (!datos.nombre || (pedirApellido && !datos.apellido)) { err.textContent = pedirApellido ? 'Escribe tu nombre y apellido.' : 'Escribe tu nombre.'; return; }
+    if (!datos.consentimiento) { err.textContent = 'Marca la casilla para poder participar.'; return; }
+    btn.disabled = true;
+    try { await onEnviar(datos, btn); }
+    catch (e) { err.textContent = e.message; btn.disabled = false; }
+  };
+  f.append(err, btn);
+  return f;
+}
+
+function pantallaRuleta() {
+  const R = D.ruleta, cont = el('div');
+  cont.appendChild(dibujarRueda(R.casillas));
+  const zona = el('div', 'mt-3');
+  cont.appendChild(zona);
+  const menu = el('div'); cont.appendChild(menu);
+  mostrar(cont);
+
+  const finalizar = (nodo) => {
+    vaciar(zona); zona.appendChild(nodo);
+    vaciar(menu); menu.appendChild(listaEnlaces(R.enlaces, '¿Qué quieres ver ahora?'));
+  };
+
+  const pantallaPremio = (r) => {
+    const caja = r.resultado === 'gana'
+      ? aviso('bg-green-50 border-green-200 text-green-800', `¡Has ganado! ${r.premio.texto}`, [])
+      : aviso('bg-slate-50 border-slate-200 text-slate-700', 'Esta vez no ha habido premio', ['Gracias por jugar. Puedes volver a intentarlo mañana.']);
+    if (r.resultado === 'gana') {
+      const cod = el('div', 'mt-3 bg-white border border-dashed border-green-300 rounded-lg p-3');
+      cod.appendChild(el('p', 'text-xs text-slate-500', 'Tu código'));
+      cod.appendChild(el('p', 'text-2xl font-bold tracking-wider font-mono', r.codigo));
+      caja.appendChild(cod);
+      caja.appendChild(el('p', 'text-sm mt-3', 'Válido solo hoy, hasta las 23:59.'));
+      caja.appendChild(el('p', 'text-sm', 'Enséñalo en el local para canjearlo.'));
+    }
+    return caja;
+  };
+
+  const mensajeSinJugar = (r) => {
+    if (r.resultado === 'ya_jugo_hoy') return aviso('bg-slate-50 border-slate-200 text-slate-700', 'Ya has jugado hoy', ['Vuelve mañana para intentarlo de nuevo.']);
+    if (r.resultado === 'ya_gano') return aviso('bg-blue-50 border-blue-200 text-blue-800', 'Ya ganaste un premio hace poco', [`Podrás volver a ganar a partir del ${r.puede_volver_texto}.`]);
+    return null;
+  };
+
+  // Premio ganado hoy en este mismo móvil: se vuelve a mostrar si cierra y reabre la página
+  const previo = leerLocal('premio-' + ID);
+  if (previo && new Date(previo.valido_hasta) > new Date()) {
+    finalizar(pantallaPremio({ resultado: 'gana', premio: previo.premio, codigo: previo.codigo }));
+    return;
+  }
+
+  if (R.premios_agotados) {
+    const bloque = el('div');
+    bloque.appendChild(aviso('bg-amber-50 border-amber-200 text-amber-800', 'Hoy ya no quedan premios', ['Vuelve mañana. Mientras tanto, mira lo que necesitas.']));
+    const quiere = el('button', 'btn border border-slate-300 mt-3', 'Avísame de la próxima promoción');
+    const zonaAviso = el('div', 'mt-3'); 
+    quiere.onclick = () => {
+      quiere.remove();
+      zonaAviso.appendChild(formularioDatos({
+        pedirApellido: false, textoBoton: 'Avisarme',
+        onEnviar: async (datos) => {
+          await pedir(`/api/publico/qr/${ID}/avisame`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+          vaciar(zonaAviso); zonaAviso.appendChild(aviso('bg-green-50 border-green-200 text-green-800', '¡Hecho!', ['Te avisaremos de la próxima promoción.']));
+        }
+      }));
+    };
+    bloque.append(quiere, zonaAviso);
+    finalizar(bloque);
+    return;
+  }
+
+  // Paso 1: invitación a jugar
+  const inicio = el('div', 'text-center');
+  inicio.appendChild(el('p', 'text-lg font-semibold leading-snug', R.titulo));
+  inicio.appendChild(el('p', 'text-sm text-slate-500 mt-1 mb-3', 'Rellena tus datos y participa.'));
+  const jugar = el('button', 'btn btn-verde', 'Quiero jugar');
+  inicio.appendChild(jugar);
+  vaciar(zona); zona.appendChild(inicio);
+
+  jugar.onclick = () => {
+    vaciar(zona);
+    zona.appendChild(formularioDatos({
+      pedirApellido: true, textoBoton: 'Girar la ruleta',
+      onEnviar: async (datos, btn) => {
+        const r = await pedir(`/api/publico/qr/${ID}/jugar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+        const sin = mensajeSinJugar(r);
+        if (sin) { finalizar(sin); return; }
+        if (r.resultado === 'agotado') {
+          D.ruleta.premios_agotados = true;
+          finalizar(aviso('bg-amber-50 border-amber-200 text-amber-800', 'Hoy ya no quedan premios', ['Vuelve mañana.']));
+          return;
+        }
+        btn.textContent = 'Girando…';
+        await girarHasta(r.indice, R.casillas.length);
+        if (r.resultado === 'gana') guardarLocal('premio-' + ID, { premio: r.premio, codigo: r.codigo, valido_hasta: r.valido_hasta });
+        finalizar(pantallaPremio(r));
+      }
+    }));
+  };
+}
+
+/* ───────────── Otros tipos ───────────── */
+function pantallaEnlaces() {
+  const c = el('div');
+  c.appendChild(el('h1', 'text-xl font-semibold text-center', D.titulo));
+  c.appendChild(listaEnlaces(D.enlaces));
+  mostrar(c);
+}
+
+function copiar(texto, boton) {
+  const listo = () => { const t = boton.textContent; boton.textContent = 'Copiado'; setTimeout(() => { boton.textContent = t; }, 1500); };
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(texto).then(listo, () => {}); return; }
+  const ta = document.createElement('textarea'); ta.value = texto; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); listo(); } catch (e) {} ta.remove();
+}
+
+function pantallaTexto() {
+  const c = el('div');
+  c.appendChild(el('h1', 'text-xl font-semibold text-center mb-4', D.titulo));
+  const grid = el('div', 'grid gap-3');
+  D.items.forEach(it => {
+    const fila = el('div', 'border border-slate-200 rounded-xl p-3 flex items-center gap-3');
+    const col = el('div', 'flex-1 min-w-0');
+    col.appendChild(el('p', 'text-xs text-slate-500', it.etiqueta));
+    col.appendChild(el('p', 'text-lg font-semibold font-mono break-all', it.valor));
+    const b = el('button', 'text-sm font-semibold text-green-700 border border-green-200 bg-green-50 rounded-lg px-3 py-1.5', 'Copiar');
+    b.onclick = () => copiar(it.valor, b);
+    fila.append(col, b); grid.appendChild(fila);
+  });
+  c.appendChild(grid);
+  if (D.nota) c.appendChild(el('p', 'text-sm text-slate-500 text-center mt-4', D.nota));
+  mostrar(c);
+}
+
+/* ───────────── Arranque ───────────── */
+(async function () {
+  try {
+    D = await pedir(`/api/publico/qr/${ID}`);
+    if (D.estado !== 'ok') {
+      document.title = D.titulo;
+      mostrar(aviso('bg-amber-50 border-amber-200 text-amber-800', D.titulo, [D.mensaje]));
+      return;
+    }
+    document.title = D.negocio;
+    $('negocio').textContent = D.negocio;
+    if (D.tipo === 'Ruleta') pantallaRuleta();
+    else if (D.tipo === 'Enlaces') pantallaEnlaces();
+    else if (D.tipo === 'Texto') pantallaTexto();
+    else mostrar(aviso('bg-slate-50 border-slate-200 text-slate-700', 'Este código no tiene página', []));
+  } catch (e) {
+    document.title = 'No disponible';
+    mostrar(aviso('bg-slate-50 border-slate-200 text-slate-700', 'No se pudo cargar', [e.message]));
+  }
+})();
+</script>
+</body>
+</html>

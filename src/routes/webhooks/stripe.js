@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
         if (negocio) {
           await activarNegocio(negocio.id, { invoiceId: invoice.id });
           if (metadata.plan && ['Pro', 'Business'].includes(metadata.plan)) {
-            await negocio.update({ plan_actual: metadata.plan });
+            await negocio.update({ plan_actual: metadata.plan, prueba_fin: null });
           }
           console.log(`[Stripe] Suscripción OK → ${negocio.nombre_empresa} ACTIVO`);
         } else {
@@ -165,7 +165,7 @@ router.post('/', async (req, res) => {
           if (negocio) {
             await activarNegocio(negocio.id, { sessionId: session.id });
             if (metadata.plan && ['Pro', 'Business'].includes(metadata.plan)) {
-              await negocio.update({ plan_actual: metadata.plan });
+              await negocio.update({ plan_actual: metadata.plan, prueba_fin: null });
             }
             console.log(`[Stripe] Checkout suscripción → ${negocio.nombre_empresa} ACTIVO`);
           }

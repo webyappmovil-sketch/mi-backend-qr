@@ -1,107 +1,78 @@
 import { Router } from 'express';
-import { ConfiguracionQR, Negocio, Escaneo } from '../models/index.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { ConfiguracionQR, Escaneo } from '../models/index.js';
+import { cargarQR, MENSAJES_BLOQUEO } from '../services/qrAcceso.js';
+import { validarUrlDestino } from '../services/ruleta.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const router = Router();
 
 /**
  * GET /r/:id_qr
- * Motor crítico de redirección.
- * - Solo redirige a WhatsApp si el negocio está en estado "Activo".
- * - Incrementa contador de forma atómica.
- * - 301 permanente para máxima velocidad.
+ * Motor de redirección. Según el tipo de QR:
+ *  - WhatsApp / Enlace → redirección 302 (NO 301: el dueño puede cambiar el destino
+ *    o pausarse el QR, y un 301 lo guardan los navegadores para siempre).
+ *  - Ruleta / Enlaces / Texto → página pública (frontend/q.html).
+ * Cada escaneo válido incrementa el contador.
  */
 router.get('/:id_qr', async (req, res) => {
-  const { id_qr } = req.params;
-
-  // Validación básica de UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(id_qr)) {
-    return res.status(400).send(htmlPage(
-      'Código QR inválido',
-      'El identificador del QR no es válido.',
-      '#64748b'
-    ));
-  }
+  res.set('Cache-Control', 'no-store');
 
   try {
-    const qr = await ConfiguracionQR.findOne({
-      where: { id: id_qr, activo: true },
-      attributes: ['id', 'mensaje_opciones_encoded', 'contador_escaneos', 'nombre_interno'],
-      include: [{
-        model: Negocio,
-        as: 'negocio',
-        attributes: ['id', 'telefono_whatsapp', 'estado_suscripcion', 'plan_actual', 'nombre_empresa']
-      }]
-    });
-
-    if (!qr || !qr.negocio) {
-      return res.status(404).send(htmlPage(
-        'Código QR no encontrado',
-        'Este código no existe o ha sido desactivado.',
-        '#64748b'
-      ));
+    const r = await cargarQR(req.params.id_qr);
+    if (r.error === 'invalido') {
+      return res.status(400).send(htmlPage('Código QR inválido', 'El identificador del QR no es válido.', '#64748b'));
+    }
+    if (r.error) {
+      return res.status(404).send(htmlPage('Código QR no encontrado', 'Este código no existe o ha sido desactivado.', '#64748b'));
     }
 
-    const { estado_suscripcion, telefono_whatsapp, nombre_empresa } = qr.negocio;
-
-    // --- Estado SUSPENDIDO ---
-    if (estado_suscripcion === 'Suspendido') {
-      return res.status(503).send(htmlPage(
-        'Este código QR se encuentra temporalmente inactivo',
-        `El negocio <strong>${nombre_empresa}</strong> aún no ha reactivado su servicio.<br>Inténtalo de nuevo más tarde.`,
-        '#ef4444',
-        '#fef2f2'
-      ));
+    const { qr, negocio, bloqueo } = r;
+    if (bloqueo) {
+      const [titulo, msg] = MENSAJES_BLOQUEO[bloqueo];
+      const color = bloqueo === 'suspendido' ? '#ef4444' : '#f59e0b';
+      const fondo = bloqueo === 'suspendido' ? '#fef2f2' : '#fffbeb';
+      return res.status(bloqueo === 'pendiente' ? 403 : 503).send(htmlPage(titulo, msg, color, fondo));
     }
 
-    // --- Estado PENDIENTE DE IMPRESIÓN (Plan Starter) ---
-    if (estado_suscripcion === 'Pendiente_Impresion') {
-      return res.status(403).send(htmlPage(
-        'Código QR pendiente de activación',
-        `Este QR de <strong>${nombre_empresa}</strong> todavía no está activo.<br>El negocio debe completar el proceso de impresión física.`,
-        '#f59e0b',
-        '#fffbeb'
-      ));
-    }
-
-    // --- Estado ACTIVO → Redirección a WhatsApp ---
-    // Incremento atómico + registro de escaneo para analíticas
-    await ConfiguracionQR.increment('contador_escaneos', {
-      by: 1,
-      where: { id: id_qr }
-    });
-
-    // Analytics + alertas de pico solo Pro/Business (no bloquean el 301)
-    const negocioId = qr.negocio.id;
-    const planActual = qr.negocio.plan_actual;
+    // Contador atómico + registro de escaneo (analíticas; no bloquea la respuesta)
+    await ConfiguracionQR.increment('contador_escaneos', { by: 1, where: { id: qr.id } });
+    const planActual = negocio.plan_actual;
     Escaneo.create({
-      qr_id: id_qr,
-      negocio_id: negocioId,
+      qr_id: qr.id,
+      negocio_id: negocio.id,
       user_agent: (req.headers['user-agent'] || '').slice(0, 255),
       scanned_at: new Date()
     })
       .then(() => {
         if (planActual === 'Pro' || planActual === 'Business') {
           import('../services/alertasEscaneo.js')
-            .then(m => m.evaluarPicoEscaneos(negocioId, planActual))
+            .then(m => m.evaluarPicoEscaneos(negocio.id, planActual))
             .catch(() => {});
         }
       })
       .catch(err => console.error('[Escaneo] Error guardando:', err.message));
 
-    // Construimos la URL de WhatsApp
-    const waUrl = `https://wa.me/${telefono_whatsapp}?text=${qr.mensaje_opciones_encoded}`;
-
-    // 301 permanente
-    return res.redirect(301, waUrl);
-
+    switch (qr.tipo_destino) {
+      case 'Enlace': {
+        const url = validarUrlDestino(qr.url_destino);
+        if (!url) {
+          return res.status(200).send(htmlPage('Este QR aún no tiene destino', 'El negocio todavía no ha elegido a dónde lleva este código.', '#64748b'));
+        }
+        return res.redirect(302, url);
+      }
+      case 'Ruleta':
+      case 'Enlaces':
+      case 'Texto':
+        return res.sendFile(path.join(__dirname, '../../frontend/q.html'));
+      default: // 'WhatsApp'
+        return res.redirect(302, `https://wa.me/${negocio.telefono_whatsapp}?text=${qr.mensaje_opciones_encoded}`);
+    }
   } catch (error) {
     console.error('[REDIRECT ERROR]', error);
-    return res.status(500).send(htmlPage(
-      'Error interno',
-      'Ha ocurrido un error. Por favor, inténtalo más tarde.',
-      '#ef4444'
-    ));
+    return res.status(500).send(htmlPage('Error interno', 'Ha ocurrido un error. Por favor, inténtalo más tarde.', '#ef4444'));
   }
 });
 

@@ -40,6 +40,21 @@ const ConfiguracionQR = sequelize.define('ConfiguracionQR', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
+  // WhatsApp (el de siempre) | Enlace | Enlaces | Texto | Ruleta
+  tipo_destino: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+    defaultValue: 'WhatsApp'
+  },
+  url_destino: {
+    type: DataTypes.STRING(2048),
+    allowNull: true
+  },
+  // Configuración específica del tipo (premios de la ruleta, lista de enlaces, texto…)
+  datos: {
+    type: DataTypes.JSON,
+    allowNull: true
+  },
   nombre_interno: {
     type: DataTypes.STRING(100),
     allowNull: true

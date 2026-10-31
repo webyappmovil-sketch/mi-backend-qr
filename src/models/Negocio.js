@@ -52,6 +52,17 @@ const Negocio = sequelize.define('Negocio', {
   fecha_proximo_pago: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  // Plan gratuito (Starter): fin de la prueba de 60 días. NULL = sin caducidad
+  // (negocios antiguos o con plan de pago).
+  prueba_fin: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  // Avisos de fin de prueba ya enviados: { d15: iso, d5: iso, d0: iso }
+  avisos_prueba: {
+    type: DataTypes.JSON,
+    allowNull: true
   }
 }, {
   tableName: 'negocios',
