@@ -18,7 +18,10 @@
 import { Router } from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
-import { activarNegocio, suspenderNegocio, encontrarNegocioPorMetadata } from '../../services/pagos.js';
+import {
+  activarNegocio, suspenderNegocio, encontrarNegocioPorMetadata,
+  procesarSesionSuscripcion, registrarPagoImpresion, registrarPagoFactura
+} from '../../services/pagos.js';
 import { PedidoImpresion, Negocio } from '../../models/index.js';
 import { enviarEmailNotificacionAdmin } from '../../services/email.js';
 import { isProduction } from '../../config/env.js';
@@ -92,6 +95,8 @@ router.post('/', async (req, res) => {
           if (metadata.plan && ['Pro', 'Business'].includes(metadata.plan)) {
             await negocio.update({ plan_actual: metadata.plan, prueba_fin: null });
           }
+          await registrarPagoFactura({ invoice, negocio, plan: ['Pro', 'Business'].includes(metadata.plan) ? metadata.plan : null })
+            .catch(e => console.error('[Stripe] Error registrando el pago:', e.message));
           console.log(`[Stripe] Suscripción OK → ${negocio.nombre_empresa} ACTIVO`);
         } else {
           console.warn('[Stripe] invoice.payment_succeeded sin negocio asociado');
@@ -154,21 +159,11 @@ router.post('/', async (req, res) => {
           break;
         }
 
-        // Primera suscripción vía Checkout
+        // Primera suscripción vía Checkout (misma lógica que la página de éxito: es idempotente)
         if (session.mode === 'subscription' || metadata.tipo === 'suscripcion') {
-          let negocio = await encontrarNegocioPorMetadata(metadata);
-          if (!negocio && session.customer_email) {
-            negocio = await Negocio.findOne({
-              where: { email: session.customer_email.toLowerCase() }
-            });
-          }
-          if (negocio) {
-            await activarNegocio(negocio.id, { sessionId: session.id });
-            if (metadata.plan && ['Pro', 'Business'].includes(metadata.plan)) {
-              await negocio.update({ plan_actual: metadata.plan, prueba_fin: null });
-            }
-            console.log(`[Stripe] Checkout suscripción → ${negocio.nombre_empresa} ACTIVO`);
-          }
+          const r = await procesarSesionSuscripcion(session);
+          if (r.ok) console.log(`[Stripe] Checkout suscripción → ${r.negocio.nombre_empresa} ACTIVO (${r.plan})`);
+          else console.warn(`[Stripe] Checkout suscripción sin activar: ${r.motivo}`);
         }
         break;
       }
@@ -239,6 +234,9 @@ async function procesarPagoImpresion(session, metadata) {
 
   // Activar negocio de inmediato
   await activarNegocio(negocio_id);
+  await registrarPagoImpresion({
+    session, negocio, material: tipo_material === 'Vinilo' ? 'Vinilo' : 'Papel', metadata
+  }).catch(e => console.error('[Stripe] Error registrando el pago:', e.message));
   console.log(`[Stripe] Negocio ${negocio.nombre_empresa} → ACTIVO (tras impresión)`);
 
   // Email al SuperAdmin

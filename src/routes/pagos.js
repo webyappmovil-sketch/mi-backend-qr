@@ -11,7 +11,7 @@ import { Router } from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { Negocio, ConfiguracionQR, PedidoImpresion } from '../models/index.js';
-import { activarNegocio } from '../services/pagos.js';
+import { activarNegocio, procesarSesionSuscripcion, registrarPagoImpresion } from '../services/pagos.js';
 import { enviarEmailNotificacionAdmin } from '../services/email.js';
 
 dotenv.config();
@@ -214,8 +214,20 @@ router.post('/confirmar-sesion', async (req, res) => {
     }
 
     const metadata = session.metadata || {};
+
+    // Suscripción Pro/Business: activa el plan aunque el webhook de Stripe no haya llegado
+    // (los datos salen de Stripe, no del navegador: solo se activa un pago realmente cobrado)
+    if (session.mode === 'subscription' || metadata.tipo === 'suscripcion') {
+      const r = await procesarSesionSuscripcion(session);
+      if (!r.ok) {
+        const msg = r.motivo === 'no_pagado' ? 'El pago aún no está confirmado' : 'No se encontró el negocio de este pago';
+        return res.status(400).json({ error: msg });
+      }
+      return res.json({ ok: true, estado: 'Activo', tipo: 'suscripcion', plan: r.plan });
+    }
+
     if (metadata.tipo !== 'impresion' || !metadata.negocio_id) {
-      return res.status(400).json({ error: 'Este pago no es de impresión' });
+      return res.status(400).json({ error: 'Este pago no es de impresión ni de suscripción' });
     }
 
     const negocio = await Negocio.findByPk(metadata.negocio_id);
@@ -243,6 +255,8 @@ router.post('/confirmar-sesion', async (req, res) => {
     }
 
     await activarNegocio(negocio.id, { sessionId: session.id });
+    await registrarPagoImpresion({ session, negocio, material: tipo, metadata })
+      .catch(e => console.error('[Pagos] Error registrando el pago:', e.message));
 
     if (!yaProcesado) {
       await enviarEmailNotificacionAdmin({

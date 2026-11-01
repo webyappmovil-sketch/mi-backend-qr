@@ -1,6 +1,6 @@
 {
   "name": "qr-saas",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "description": "Mini-SaaS de códigos QR inteligentes con WhatsApp para negocios en España",
   "type": "module",
   "scripts": {

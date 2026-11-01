@@ -3,7 +3,8 @@
  * tras eventos de Stripe o Revolut.
  */
 
-import { Negocio } from '../models/index.js';
+import { Negocio, Pago, Vendedor } from '../models/index.js';
+import { notificarAdmin, formatoEuros } from './notificaciones.js';
 
 /**
  * Activa un negocio y registra la renovación por 30 días.
@@ -63,4 +64,111 @@ export async function encontrarNegocioPorMetadata(metadata = {}) {
     return Negocio.findOne({ where: { email: metadata.email } });
   }
   return null;
+}
+
+
+/* ═════════ Registro de pagos y aviso al administrador ═════════ */
+
+export const PRECIOS_CENTIMOS = { Pro: 1999, Business: 2999, Papel: 1000, Vinilo: 2000 };
+
+const idDe = v => (v && typeof v === 'object' ? v.id : v) || null;
+
+/** Guarda el pago una sola vez. `nuevo` es false si ya estaba registrado. */
+export async function registrarPago(datos) {
+  const [pago, nuevo] = await Pago.findOrCreate({ where: { referencia: datos.referencia }, defaults: datos });
+  return { pago, nuevo };
+}
+
+/** Avisa al admin (WhatsApp + email) con los datos del pago */
+export async function avisarPago({ negocio, pago }) {
+  let vendedor = 'Directo (sin vendedor)';
+  if (negocio.vendedor_id) {
+    const v = await Vendedor.findByPk(negocio.vendedor_id);
+    if (v) vendedor = `${v.nombre} (${v.codigo})`;
+  }
+  const concepto = pago.tipo === 'Impresion'
+    ? `Impresión ${pago.material || ''}`.trim()
+    : `${pago.tipo === 'Renovacion' ? 'Renovación' : 'Suscripción'} plan ${pago.plan || ''}`.trim();
+  const fecha = new Date(pago.created_at || Date.now()).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'short', timeStyle: 'short' });
+
+  const lineas = [
+    '💰 PAGO RECIBIDO',
+    `Negocio: ${negocio.nombre_empresa}`,
+    `Concepto: ${concepto}`,
+    `Importe: ${formatoEuros(pago.importe_centimos, pago.moneda)}`,
+    `Email: ${pago.pagador_email || negocio.email}`,
+    `WhatsApp del negocio: ${negocio.telefono_whatsapp}`
+  ];
+  if (pago.pagador_nombre) lineas.push(`Contacto: ${pago.pagador_nombre}`);
+  if (pago.pagador_telefono) lineas.push(`Teléfono contacto: ${pago.pagador_telefono}`);
+  lineas.push(`Vendedor: ${vendedor}`, `Fecha: ${fecha}`);
+
+  return notificarAdmin({ asunto: `Pago recibido: ${negocio.nombre_empresa} · ${formatoEuros(pago.importe_centimos, pago.moneda)}`, texto: lineas.join('\n') });
+}
+
+/**
+ * Suscripción Pro/Business pagada (sesión de Stripe Checkout).
+ * Idempotente: se puede llamar desde el webhook Y desde la página de éxito sin duplicar nada.
+ */
+export async function procesarSesionSuscripcion(session) {
+  const metadata = session.metadata || {};
+  if (session.payment_status !== 'paid') return { ok: false, motivo: 'no_pagado' };
+
+  let negocio = await encontrarNegocioPorMetadata(metadata);
+  if (!negocio && session.customer_email) {
+    negocio = await Negocio.findOne({ where: { email: session.customer_email.toLowerCase() } });
+  }
+  if (!negocio) return { ok: false, motivo: 'sin_negocio' };
+
+  const plan = ['Pro', 'Business'].includes(metadata.plan) ? metadata.plan : null;
+  await activarNegocio(negocio.id, { sessionId: session.id });
+  if (plan) await negocio.update({ plan_actual: plan, prueba_fin: null });
+
+  const { pago, nuevo } = await registrarPago({
+    negocio_id: negocio.id,
+    tipo: 'Suscripcion',
+    plan: plan || negocio.plan_actual,
+    importe_centimos: Number.isInteger(session.amount_total) ? session.amount_total : (PRECIOS_CENTIMOS[plan] || 0),
+    moneda: session.currency || 'eur',
+    referencia: idDe(session.invoice) || session.id,
+    pagador_nombre: session.customer_details?.name || null,
+    pagador_email: session.customer_details?.email || session.customer_email || null,
+    pagador_telefono: session.customer_details?.phone || null
+  });
+  if (nuevo) await avisarPago({ negocio, pago }).catch(e => console.error('[Aviso] Error:', e.message));
+  return { ok: true, negocio, plan: plan || negocio.plan_actual, nuevo };
+}
+
+/** Pago de impresión (Papel/Vinilo): registra y avisa una sola vez por sesión */
+export async function registrarPagoImpresion({ session, negocio, material, metadata }) {
+  const { pago, nuevo } = await registrarPago({
+    negocio_id: negocio.id,
+    tipo: 'Impresion',
+    material,
+    importe_centimos: Number.isInteger(session.amount_total) ? session.amount_total : PRECIOS_CENTIMOS[material],
+    moneda: session.currency || 'eur',
+    referencia: session.id,
+    pagador_nombre: metadata.nombre_contacto || session.customer_details?.name || null,
+    pagador_email: session.customer_details?.email || session.customer_email || null,
+    pagador_telefono: metadata.telefono_contacto || session.customer_details?.phone || null
+  });
+  if (nuevo) await avisarPago({ negocio, pago }).catch(e => console.error('[Aviso] Error:', e.message));
+  return { pago, nuevo };
+}
+
+/** Factura de suscripción cobrada (primer pago o renovación mensual) */
+export async function registrarPagoFactura({ invoice, negocio, plan }) {
+  const { pago, nuevo } = await registrarPago({
+    negocio_id: negocio.id,
+    tipo: invoice.billing_reason === 'subscription_cycle' ? 'Renovacion' : 'Suscripcion',
+    plan: plan || negocio.plan_actual,
+    importe_centimos: Number.isInteger(invoice.amount_paid) ? invoice.amount_paid : (PRECIOS_CENTIMOS[plan] || 0),
+    moneda: invoice.currency || 'eur',
+    referencia: invoice.id,
+    pagador_nombre: invoice.customer_name || null,
+    pagador_email: invoice.customer_email || null,
+    pagador_telefono: invoice.customer_phone || null
+  });
+  if (nuevo) await avisarPago({ negocio, pago }).catch(e => console.error('[Aviso] Error:', e.message));
+  return { pago, nuevo };
 }

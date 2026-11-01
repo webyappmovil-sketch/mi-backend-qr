@@ -23,7 +23,7 @@
     <div id="contenido" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
       <p class="text-center text-slate-400 py-10">Cargando…</p>
     </div>
-    <p class="text-center text-xs text-slate-400 mt-4">QR SaaS · España</p>
+    <p class="text-center text-xs text-slate-400 mt-4">QR SaaS · España · <span id="version">v…</span></p>
   </main>
 
 <script>
@@ -121,11 +121,47 @@ function campo(id, placeholder, tipo, extra) {
   i.maxLength = 60; Object.assign(i, extra || {}); return i;
 }
 
+/* Estado del número mientras se escribe (misma regla que el servidor: móvil español 6xx/7xx) */
+function estadoWhatsApp(valor) {
+  let d = String(valor || '').replace(/[\s\-().]/g, '');
+  if (d.startsWith('+')) d = d.slice(1);
+  if (d.startsWith('0034')) d = d.slice(4);
+  let aviso = '';
+  if (d.startsWith('34') && d.length > 9) { d = d.slice(2); aviso = ' No hace falta escribir el +34.'; }
+  if (!d) return { ok: false, tipo: 'ayuda', msg: 'Escríbelo sin el +34. Solo móviles (empiezan por 6 o 7); no valen los fijos (91…).' };
+  if (/^[89]/.test(d)) return { ok: false, tipo: 'error', msg: 'Los teléfonos fijos (empiezan por 8 o 9) no valen. Escribe tu móvil.' };
+  if (/^[67]\d{8}$/.test(d)) return { ok: true, tipo: 'ok', msg: '✓ Número válido.' + aviso };
+  if (/^[67]\d{0,7}$/.test(d)) return { ok: false, tipo: 'ayuda', msg: `Faltan ${9 - d.length} ${9 - d.length === 1 ? 'dígito' : 'dígitos'}.` };
+  return { ok: false, tipo: 'error', msg: 'Debe tener 9 dígitos y empezar por 6 o 7.' };
+}
+
+function campoWhatsApp() {
+  const cont = el('div');
+  const etq = el('label', 'flex items-center gap-1.5 text-sm font-semibold text-green-700 mb-1', '💬 Tu WhatsApp');
+  etq.htmlFor = 'f-tel';
+  const fila = el('div', 'flex');
+  const pref = el('span', 'flex items-center px-3 border border-r-0 border-green-300 bg-green-50 text-green-800 font-semibold', '+34');
+  pref.style.borderRadius = '.6rem 0 0 .6rem';
+  const i = campo('f-tel', '612 345 678', 'tel', { autocomplete: 'tel-national', inputMode: 'numeric', maxLength: 20 });
+  i.style.borderRadius = '0 .6rem .6rem 0'; i.style.borderColor = '#86efac';
+  fila.append(pref, i);
+  const ayuda = el('p', 'text-xs mt-1 text-green-700'); ayuda.id = 'f-tel-ayuda';
+  const pintar = () => {
+    const e = estadoWhatsApp(i.value);
+    ayuda.textContent = e.msg;
+    ayuda.className = 'text-xs mt-1 ' + (e.tipo === 'error' ? 'text-red-600' : 'text-green-700');
+    i.style.borderColor = e.tipo === 'error' ? '#fca5a5' : '#86efac';
+  };
+  i.addEventListener('input', pintar); pintar();
+  cont.append(etq, fila, ayuda);
+  return cont;
+}
+
 function formularioDatos({ pedirApellido, textoBoton, onEnviar }) {
   const f = el('div', 'grid gap-2.5');
   f.appendChild(campo('f-nombre', 'Nombre', 'text', { autocomplete: 'given-name' }));
   if (pedirApellido) f.appendChild(campo('f-apellido', 'Apellido', 'text', { autocomplete: 'family-name' }));
-  f.appendChild(campo('f-tel', 'Móvil (ej. 612 345 678)', 'tel', { autocomplete: 'tel', inputMode: 'tel', maxLength: 20 }));
+  f.appendChild(campoWhatsApp());
   const lab = el('label', 'flex gap-2 items-start text-xs text-slate-500 leading-relaxed');
   const chk = el('input'); chk.type = 'checkbox'; chk.id = 'f-ok'; chk.className = 'mt-1'; // sin marcar por defecto
   lab.append(chk, el('span', '', D.texto_consentimiento));
@@ -141,6 +177,8 @@ function formularioDatos({ pedirApellido, textoBoton, onEnviar }) {
       consentimiento: $('f-ok').checked
     };
     if (!datos.nombre || (pedirApellido && !datos.apellido)) { err.textContent = pedirApellido ? 'Escribe tu nombre y apellido.' : 'Escribe tu nombre.'; return; }
+    const num = estadoWhatsApp(datos.telefono);
+    if (!num.ok) { err.textContent = num.tipo === 'error' ? num.msg : 'Escribe tu número de WhatsApp completo (9 dígitos que empiecen por 6 o 7).'; return; }
     if (!datos.consentimiento) { err.textContent = 'Marca la casilla para poder participar.'; return; }
     btn.disabled = true;
     try { await onEnviar(datos, btn); }
@@ -275,6 +313,8 @@ function pantallaTexto() {
 }
 
 /* ───────────── Arranque ───────────── */
+fetch('/health').then(r => r.json()).then(j => { $('version').textContent = 'v' + j.version; }).catch(() => {});
+
 (async function () {
   try {
     D = await pedir(`/api/publico/qr/${ID}`);

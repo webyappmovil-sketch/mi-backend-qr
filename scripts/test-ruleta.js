@@ -7,6 +7,7 @@
  * Arranca su propio servidor con una base de datos temporal. Solo para uso local.
  */
 import { spawn } from 'child_process';
+import http from 'http';
 import { rmSync } from 'fs';
 
 const PORT = 3300;
@@ -14,7 +15,9 @@ const BASE = `http://localhost:${PORT}`;
 const DB = `/tmp/test-ruleta-${Date.now()}.sqlite`;
 const ENV = {
   ...process.env, PORT: String(PORT), DB_STORAGE: DB, JWT_SECRET: 'test-secret-local-test-secret-local-1234',
-  PUBLICO_MAX_POR_MINUTO: '1000', NODE_ENV: 'test'
+  PUBLICO_MAX_POR_MINUTO: '1000', NODE_ENV: 'test',
+  STRIPE_SECRET_KEY: 'sk_test_dummy_local', STRIPE_WEBHOOK_SECRET: 'whsec_test_local_secret',
+  CALLMEBOT_URL: 'http://localhost:3399/whatsapp.php', CALLMEBOT_PHONE: '+34600000000', CALLMEBOT_APIKEY: '123456'
 };
 delete ENV.DATABASE_URL; delete ENV.RENDER;
 // Para probar contra PostgreSQL local: TEST_DATABASE_URL=postgres://… node scripts/test-ruleta.js
@@ -28,10 +31,10 @@ function check(nombre, cond, extra = '') {
 }
 const titulo = t => console.log(`\n── ${t}`);
 
-async function api(path, { method = 'GET', body, token, manual } = {}) {
+async function api(path, { method = 'GET', body, token, manual, headers = {} } = {}) {
   const res = await fetch(BASE + path, {
     method, redirect: manual ? 'manual' : 'follow',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined
   });
   let json = null;
@@ -47,6 +50,10 @@ async function registrar(nombre, plan) {
   });
   return { token: r.json.token, id: r.json.user.id, qrId: r.json.user.qrId || r.json.qrId, email, raw: r };
 }
+
+// Servidor falso que hace de CallMeBot y apunta los avisos de WhatsApp que recibe
+const avisos = [];
+const mock = http.createServer((req, res) => { avisos.push(new URL(req.url, 'http://x').searchParams.get('text')); res.end('ok'); }).listen(3399);
 
 const server = spawn('node', ['src/app.js'], { env: ENV, stdio: ['ignore', 'pipe', 'pipe'] });
 let salida = '';
@@ -98,14 +105,26 @@ try {
   r = await api('/api/negocio/qrs', { method: 'POST', token: A.token, body: { tipo_destino: 'Enlace', nombre: 'Carta', url_destino: 'https://carta.test/v1' } });
   check('Crea QR de tipo Enlace', r.status === 201);
   const qrEnlace = r.json.qr.id;
-  r = await api(`/r/${qrEnlace}`, { manual: true });
+  r = await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-A' } });
   check('Escaneo → redirección 302 (no 301)', r.status === 302 && r.headers.get('location') === 'https://carta.test/v1');
   check('Sin caché en el navegador', (r.headers.get('cache-control') || '').includes('no-store'));
   await api(`/api/negocio/qrs/${qrEnlace}`, { method: 'PUT', token: A.token, body: { nombre: 'Carta', url_destino: 'https://carta.test/v2' } });
-  r = await api(`/r/${qrEnlace}`, { manual: true });
+  r = await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-B' } });
   check('El cambio de URL se aplica al instante', r.headers.get('location') === 'https://carta.test/v2');
   const cont = (await ConfiguracionQR.findByPk(qrEnlace)).contador_escaneos;
   check('Cuenta los escaneos', cont === 2, `(${cont})`);
+
+  titulo('Escaneos reales (sin robots, precargas ni recargas)');
+  const contador = async () => (await ConfiguracionQR.findByPk(qrEnlace)).contador_escaneos;
+  const antesEsc = await contador();
+  r = await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'WhatsApp/2.23.20 A' } });
+  check('Vista previa de WhatsApp: sigue redirigiendo pero NO cuenta', r.status === 302 && (await contador()) === antesEsc);
+  r = await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-C', 'Sec-Purpose': 'prefetch' } });
+  check('Precarga del navegador: NO cuenta', (await contador()) === antesEsc);
+  await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-C' } });
+  await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-C' } });
+  await api(`/r/${qrEnlace}`, { manual: true, headers: { 'User-Agent': 'Mozilla/5.0 movil-C' } });
+  check('Recargar 3 veces seguidas desde el mismo móvil cuenta como 1', (await contador()) === antesEsc + 1, `(${await contador()} vs ${antesEsc + 1})`);
 
   titulo('Fin de la prueba: cortesía y pausa');
   await nA.update({ prueba_fin: new Date(Date.now() - 3 * DIA) });
@@ -249,6 +268,77 @@ try {
   r = await api(`/api/negocio/qrs/${qrRuleta}`, { method: 'PUT', token: A.token, body: { nombre: 'hack' } });
   check('Otro negocio no puede editar mis QR', r.status === 404);
 
+  titulo('Métricas: clientes capturados y escaneos');
+  const { Op: OpM } = await import('sequelize');
+  const telsB = new Set((await Participacion.findAll({ where: { negocio_id: B.id }, attributes: ['telefono'], raw: true })).map(x => x.telefono));
+  r = await api('/api/negocio/metricas', { token: B.token });
+  check('"Clientes capturados" incluye a quien rellenó el formulario (sin duplicar móviles)', r.json.total_clientes === telsB.size && r.json.total_clientes >= 2, `(${r.json.total_clientes} vs ${telsB.size})`);
+  const sumaB = (await ConfiguracionQR.findAll({ where: { negocio_id: B.id }, raw: true })).reduce((a, q) => a + q.contador_escaneos, 0);
+  check('"Total de escaneos" suma todos los QR del negocio', r.json.total_escaneos === sumaB, `(${r.json.total_escaneos} vs ${sumaB})`);
+
+  titulo('Pagos: webhook de Stripe firmado, registro y aviso por WhatsApp');
+  const Stripe = (await import('stripe')).default;
+  const { procesarSesionSuscripcion } = await import('../src/services/pagos.js');
+  const { Pago } = await import('../src/models/index.js');
+  const U = await registrar('Bar Mejora', 'Starter');
+  const nU = await Negocio.findByPk(U.id);
+  check('Parte del plan gratuito, activo y con prueba', nU.plan_actual === 'Starter' && nU.estado_suscripcion === 'Activo' && !!nU.prueba_fin);
+
+  const aleat = () => Math.random().toString(36).slice(2);
+  const sesion = (extra = {}) => ({ id: 'cs_test_' + aleat(), object: 'checkout.session', mode: 'subscription', status: 'complete', payment_status: 'paid',
+    amount_total: 1999, currency: 'eur', invoice: 'in_test_1', customer_email: U.email,
+    customer_details: { name: 'Juan Pérez', email: U.email, phone: null }, metadata: { negocio_id: U.id, plan: 'Pro', tipo: 'suscripcion' }, ...extra });
+  const evento = (type, obj) => JSON.stringify({ id: 'evt_' + aleat(), object: 'event', type, data: { object: obj } });
+  const enviar = (payload, secret = ENV.STRIPE_WEBHOOK_SECRET) => fetch(BASE + '/webhooks/stripe', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'stripe-signature': Stripe.webhooks.generateTestHeaderString({ payload, secret }) }, body: payload });
+
+  const evPago = evento('checkout.session.completed', sesion());
+  r = await enviar(evPago, 'whsec_secreto_falso');
+  check('Evento con firma falsa → rechazado (400)', r.status === 400);
+  await nU.reload();
+  check('…y el plan NO cambia ni se avisa a nadie', nU.plan_actual === 'Starter' && avisos.length === 0);
+
+  r = await enviar(evPago);
+  check('Evento con firma correcta → aceptado', r.status === 200);
+  await nU.reload();
+  check('Tras pagar pasa a Pro, activo y sin caducidad de prueba', nU.plan_actual === 'Pro' && nU.estado_suscripcion === 'Activo' && nU.prueba_fin === null, `(${nU.plan_actual}/${nU.estado_suscripcion}/${nU.prueba_fin})`);
+  check('Se registra el pago (19,99 €)', (await Pago.count({ where: { negocio_id: U.id } })) === 1 && (await Pago.findOne({ where: { negocio_id: U.id } })).importe_centimos === 1999);
+  check('Llega UN aviso por WhatsApp con negocio, plan, importe y contacto', avisos.length === 1 && /Bar Mejora/.test(avisos[0]) && /Pro/.test(avisos[0]) && /19,99/.test(avisos[0]) && /Juan Pérez/.test(avisos[0]), JSON.stringify(avisos));
+  check('El aviso incluye el email y el vendedor', avisos[0].includes(U.email) && /Directo/.test(avisos[0]));
+
+  await enviar(evPago);
+  check('Si Stripe reenvía el mismo evento NO se duplica el pago ni el aviso', avisos.length === 1 && (await Pago.count({ where: { negocio_id: U.id } })) === 1);
+  await enviar(evento('invoice.payment_succeeded', { id: 'in_test_1', amount_paid: 1999, currency: 'eur', billing_reason: 'subscription_create', customer_email: U.email,
+    subscription_details: { metadata: { negocio_id: U.id, plan: 'Pro', tipo: 'suscripcion' } } }));
+  check('La factura del mismo cobro (otro evento) tampoco duplica', avisos.length === 1 && (await Pago.count({ where: { negocio_id: U.id } })) === 1);
+
+  await enviar(evento('invoice.payment_succeeded', { id: 'in_test_2', amount_paid: 1999, currency: 'eur', billing_reason: 'subscription_cycle', customer_email: U.email,
+    subscription_details: { metadata: { negocio_id: U.id, plan: 'Pro', tipo: 'suscripcion' } } }));
+  check('Una renovación mensual sí genera un aviso nuevo, marcado como renovación', avisos.length === 2 && /Renovación/.test(avisos[1]), JSON.stringify(avisos[1]));
+
+  await enviar(evento('checkout.session.completed', { id: 'cs_test_imp1', object: 'checkout.session', mode: 'payment', status: 'complete', payment_status: 'paid', amount_total: 2000, currency: 'eur',
+    customer_email: U.email, metadata: { tipo: 'impresion', negocio_id: U.id, tipo_material: 'Vinilo', nombre_contacto: 'María Gil', telefono_contacto: '611222333', direccion_envio: 'Calle Sol 1, Madrid' } }));
+  check('Un pago de impresión avisa con material, importe y datos de contacto', avisos.length === 3 && /Impresión Vinilo/.test(avisos[2]) && /20,00/.test(avisos[2]) && /María Gil/.test(avisos[2]) && /611222333/.test(avisos[2]), JSON.stringify(avisos[2]));
+
+  titulo('Activación desde la página de pago correcto (sin depender del webhook)');
+  const U2 = await registrar('Bar Fallback', 'Starter');
+  const s2 = sesion({ id: 'cs_test_fb1', invoice: 'in_test_9', amount_total: 2999, customer_email: U2.email, customer_details: { name: 'Eva Ruiz', email: U2.email }, metadata: { negocio_id: U2.id, plan: 'Business', tipo: 'suscripcion' } });
+  const antesAv = avisos.length;
+  let rr = await procesarSesionSuscripcion(s2);
+  const nU2 = await Negocio.findByPk(U2.id);
+  check('Un pago cobrado activa el plan Business aunque el webhook no llegue', rr.ok && nU2.plan_actual === 'Business' && nU2.estado_suscripcion === 'Activo' && nU2.prueba_fin === null);
+  check('…y avisa una vez con el importe de 29,99 €', avisos.length === antesAv + 1 && /29,99/.test(avisos[antesAv]) && /Business/.test(avisos[antesAv]));
+  await procesarSesionSuscripcion(s2);
+  check('Repetirlo (webhook + página de éxito) no duplica el aviso', avisos.length === antesAv + 1);
+  const U3 = await registrar('Bar Sin Pagar', 'Starter');
+  rr = await procesarSesionSuscripcion(sesion({ id: 'cs_test_np', invoice: null, payment_status: 'unpaid', metadata: { negocio_id: U3.id, plan: 'Pro', tipo: 'suscripcion' } }));
+  const nU3 = await Negocio.findByPk(U3.id);
+  check('Una sesión NO pagada no cambia el plan ni avisa', !rr.ok && nU3.plan_actual === 'Starter' && avisos.length === antesAv + 1);
+  r = await api('/api/negocio/qrs', { token: U.token });
+  check('El panel ya muestra Pro con 5 QR y todos los tipos', r.json.plan.max_qr === 5 && r.json.plan.tipos_permitidos.includes('Ruleta'));
+  r = await api('/health');
+  check('/health informa de la versión', /^\d+\.\d+\.\d+$/.test(r.json.version), JSON.stringify(r.json));
+
   /* ───────────── Avisos de prueba ───────────── */
   titulo('Avisos de fin de prueba (día 45, 55 y 60)');
   const casos = [['Prueba D40', 20, null], ['Prueba D45', 14, 'd15'], ['Prueba D55', 4, 'd5'], ['Prueba D61', -1, 'd0']];
@@ -273,6 +363,7 @@ try {
   console.error('\n💥 Error en las pruebas:', e);
 } finally {
   server.kill();
+  mock.close();
   try { rmSync(DB, { force: true }); } catch { /* nada */ }
   process.exit(fallos ? 1 : 0);
 }

@@ -7,6 +7,9 @@ import { sequelize } from './models/index.js';
 import redirectRouter from './routes/redirect.js';
 import publicoRouter from './routes/publico.js';
 import { iniciarAvisosPrueba } from './services/pruebaGratuita.js';
+import { readFileSync } from 'fs';
+
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 import stripeWebhook from './routes/webhooks/stripe.js';
 import revolutWebhook from './routes/webhooks/revolut.js';
 import whatsappWebhook from './routes/webhooks/whatsapp.js';
@@ -72,6 +75,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     phase: '1 + 2 – DB + Redirect + Payments + WhatsApp Bot',
     db: sequelize.getDialect(),
+    version: VERSION,
     timestamp: new Date().toISOString()
   });
 });
