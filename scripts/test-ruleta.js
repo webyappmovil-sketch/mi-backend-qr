@@ -17,6 +17,8 @@ const ENV = {
   ...process.env, PORT: String(PORT), DB_STORAGE: DB, JWT_SECRET: 'test-secret-local-test-secret-local-1234',
   PUBLICO_MAX_POR_MINUTO: '1000', NODE_ENV: 'test',
   STRIPE_SECRET_KEY: 'sk_test_dummy_local', STRIPE_WEBHOOK_SECRET: 'whsec_test_local_secret',
+  ADMIN_EMAIL: 'admin@test.es', AVISOS_EMAIL: 'avisos@test.es',
+  BREVO_API_KEY: 'xkeysib-test', BREVO_API_URL: 'http://localhost:3398/v3/smtp/email', BREVO_SENDER_EMAIL: 'envios@test.es',
   CALLMEBOT_URL: 'http://localhost:3399/whatsapp.php', CALLMEBOT_PHONE: '+34600000000', CALLMEBOT_APIKEY: '123456'
 };
 delete ENV.DATABASE_URL; delete ENV.RENDER;
@@ -54,6 +56,14 @@ async function registrar(nombre, plan) {
 // Servidor falso que hace de CallMeBot y apunta los avisos de WhatsApp que recibe
 const avisos = [];
 const mock = http.createServer((req, res) => { avisos.push(new URL(req.url, 'http://x').searchParams.get('text')); res.end('ok'); }).listen(3399);
+
+// Servidor falso que hace de la API de Brevo y apunta los correos que recibe
+const correos = [];
+const mockBrevo = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', d => { body += d; });
+  req.on('end', () => { correos.push({ clave: req.headers['api-key'], metodo: req.method, ...JSON.parse(body || '{}') }); res.statusCode = 201; res.end('{"messageId":"<test@brevo>"}'); });
+}).listen(3398);
 
 const server = spawn('node', ['src/app.js'], { env: ENV, stdio: ['ignore', 'pipe', 'pipe'] });
 let salida = '';
@@ -305,6 +315,11 @@ try {
   check('Se registra el pago (19,99 €)', (await Pago.count({ where: { negocio_id: U.id } })) === 1 && (await Pago.findOne({ where: { negocio_id: U.id } })).importe_centimos === 1999);
   check('Llega UN aviso por WhatsApp con negocio, plan, importe y contacto', avisos.length === 1 && /Bar Mejora/.test(avisos[0]) && /Pro/.test(avisos[0]) && /19,99/.test(avisos[0]) && /Juan Pérez/.test(avisos[0]), JSON.stringify(avisos));
   check('El aviso incluye el email y el vendedor', avisos[0].includes(U.email) && /Directo/.test(avisos[0]));
+  await new Promise(res => setTimeout(res, 400));
+  const correoPago = correos.find(c => /Pago recibido/.test(c.subject || ''));
+  check('El aviso por email sale por la API web de Brevo (no por SMTP)', !!correoPago && correoPago.metodo === 'POST' && correoPago.clave === 'xkeysib-test');
+  check('Va a AVISOS_EMAIL, con el remitente configurado, y NO al correo de login del admin', correoPago?.to?.[0]?.email === 'avisos@test.es' && correoPago.sender.email === 'envios@test.es' && !correos.some(c => c.to?.some(t => t.email === 'admin@test.es')), JSON.stringify(correoPago));
+  check('El correo trae el detalle del pago (negocio, importe, contacto)', /Bar Mejora/.test(correoPago?.textContent || '') && /19,99/.test(correoPago.textContent) && /Juan Pérez/.test(correoPago.textContent));
 
   await enviar(evPago);
   check('Si Stripe reenvía el mismo evento NO se duplica el pago ni el aviso', avisos.length === 1 && (await Pago.count({ where: { negocio_id: U.id } })) === 1);
@@ -364,6 +379,7 @@ try {
 } finally {
   server.kill();
   mock.close();
+  mockBrevo.close();
   try { rmSync(DB, { force: true }); } catch { /* nada */ }
   process.exit(fallos ? 1 : 0);
 }

@@ -1,6 +1,6 @@
 /**
- * Envío de correos vía Brevo SMTP (Nodemailer)
- * Si SMTP no está configurado, imprime el email en consola (dev).
+ * Envío de correos: API web de Brevo (BREVO_API_KEY) o SMTP con Nodemailer.
+ * Si no hay ninguno configurado, imprime el email en consola (dev).
  */
 
 import nodemailer from 'nodemailer';
@@ -8,7 +8,46 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/**
+ * Envío por la API web de Brevo (HTTPS, puerto 443).
+ * Es la forma de enviar correos desde el plan GRATUITO de Render, que bloquea los
+ * puertos SMTP (25, 465 y 587). Se activa definiendo BREVO_API_KEY.
+ *
+ *   BREVO_API_KEY       clave de Brevo (empieza por xkeysib-)
+ *   BREVO_SENDER_EMAIL  remitente, que debe estar verificado en Brevo (Senders)
+ *   BREVO_SENDER_NAME   (opcional) nombre del remitente
+ */
+function aListaDeDestinatarios(to) {
+  return (Array.isArray(to) ? to : String(to).split(','))
+    .map(x => String(x).trim()).filter(Boolean)
+    .map(x => { const m = x.match(/<([^>]+)>/); return { email: (m ? m[1] : x).trim() }; });
+}
+
+async function enviarPorBrevo({ from, to, subject, html, text }) {
+  const remitente = process.env.BREVO_SENDER_EMAIL || String(from || '').replace(/^.*<([^>]+)>.*$/, '$1');
+  const cuerpo = {
+    sender: { email: remitente, ...(process.env.BREVO_SENDER_NAME ? { name: process.env.BREVO_SENDER_NAME } : {}) },
+    to: aListaDeDestinatarios(to),
+    subject,
+    ...(html ? { htmlContent: html } : {}),
+    ...(text ? { textContent: text } : {})
+  };
+  if (!cuerpo.htmlContent && !cuerpo.textContent) cuerpo.textContent = subject;
+  const r = await fetch(process.env.BREVO_API_URL || 'https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json', 'api-key': process.env.BREVO_API_KEY },
+    body: JSON.stringify(cuerpo),
+    signal: AbortSignal.timeout(15_000)
+  });
+  if (!r.ok) throw new Error(`Brevo respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return r.json().catch(() => ({}));
+}
+
 function crearTransporter() {
+  // 1) API web de Brevo (funciona en el plan gratuito de Render)
+  if (process.env.BREVO_API_KEY) return { sendMail: enviarPorBrevo };
+
+  // 2) SMTP clásico (solo funciona si el hosting no bloquea esos puertos)
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
@@ -64,7 +103,7 @@ export async function enviarEmailNotificacionAdmin(datosPedido) {
     archivoQrUrl ||
     (qrId ? `${process.env.APP_BASE_URL || 'http://localhost:3000'}/r/${qrId}` : 'No disponible');
 
-  const to = process.env.ADMIN_EMAIL || 'admin@qrsas.es';
+  const to = process.env.AVISOS_EMAIL || process.env.ADMIN_EMAIL || 'admin@qrsas.es';
   const from = process.env.EMAIL_FROM || 'noreply@qrsas.es';
   const subject = `[QR SaaS] Nuevo pedido de impresión – ${nombreEmpresa} (${tipoMaterial})`;
 

@@ -1,7 +1,8 @@
 /**
  * Avisos al administrador cuando entra un pago.
  *
- *  - Email al ADMIN_EMAIL (necesita las variables SMTP_* configuradas en Render).
+ *  - Email a AVISOS_EMAIL (si no existe, a ADMIN_EMAIL). Necesita las variables SMTP_* en Render.
+ *    AVISOS_EMAIL es independiente del correo con el que entras como Super Admin.
  *  - WhatsApp a tu número mediante CallMeBot (servicio gratuito, de uso personal):
  *      CALLMEBOT_PHONE   tu número con prefijo, ej. +34600111222
  *      CALLMEBOT_APIKEY  la clave que te envía el bot al activarlo
@@ -35,8 +36,8 @@ async function porWhatsApp(texto) {
 }
 
 async function porEmail(asunto, texto) {
-  const to = process.env.ADMIN_EMAIL;
-  if (!to) return { canal: 'email', enviado: false, motivo: 'sin ADMIN_EMAIL' };
+  const to = process.env.AVISOS_EMAIL || process.env.ADMIN_EMAIL;
+  if (!to) return { canal: 'email', enviado: false, motivo: 'sin AVISOS_EMAIL ni ADMIN_EMAIL' };
   try {
     await enviarEmailGenerico({
       to, subject: asunto, text: texto,
