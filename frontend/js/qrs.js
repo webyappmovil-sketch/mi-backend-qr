@@ -25,7 +25,7 @@ const QRS = (() => {
       { texto: '2x1 en café', color: COLORES[5][0], probabilidad: 5, es_premio: true, tope_dia: 3 },
       { texto: 'Sigue probando', color: COLORES[6][0], probabilidad: 45, es_premio: false, tope_dia: '' }
     ],
-    periodo_dias: 7, enlaces: []
+    periodo_dias: 7, validez: 'dia', enlaces: []
   });
 
   let S = { qrs: [], plan: null, estado: null, telefono: '', modal: null };
@@ -248,7 +248,10 @@ const QRS = (() => {
         <div><label class="block text-sm font-medium mb-1">Un premio por persona cada</label>
           <select id="f-periodo" class="${campo}"><option value="7" ${f.periodo_dias == 7 ? 'selected' : ''}>Semana</option><option value="30" ${f.periodo_dias == 30 ? 'selected' : ''}>Mes</option></select></div>
         <div><label class="block text-sm font-medium mb-1">El premio se puede canjear</label>
-          <select class="${campo}" disabled><option>Solo el día en que se gana</option></select></div>
+          <select id="f-validez" class="${campo}">
+            <option value="dia" ${f.validez !== 'hora' ? 'selected' : ''}>Solo el día en que se gana</option>
+            <option value="hora" ${f.validez === 'hora' ? 'selected' : ''}>Canjear ahora mismo: tienes hasta una hora</option>
+          </select></div>
       </div>
       <p class="text-xs text-slate-400 mt-2">Cada persona puede jugar una vez al día. Si un premio llega a su tope diario, esa casilla aparece como "Sigue probando"; si no queda ningún premio, se avisa antes de pedir datos.</p>
       <p class="text-sm font-medium mt-4 mb-1">Qué ve el cliente después de jugar (opcional)</p>
@@ -305,6 +308,7 @@ const QRS = (() => {
     }
     if (m.tipo === 'Ruleta') {
       f.periodo_dias = Number(v('f-periodo')) || 7;
+      f.validez = v('f-validez') === 'hora' ? 'hora' : 'dia';
       f.premios = [...document.querySelectorAll('.fila-premio')].map(r => {
         const g = k => r.querySelector(`[data-k=${k}]`);
         return { color: g('color').value, texto: g('texto').value, es_premio: g('es_premio').checked, probabilidad: g('probabilidad').value, tope_dia: g('tope_dia').value };
@@ -330,11 +334,13 @@ const QRS = (() => {
     if (m.modo === 'crear') body.tipo_destino = m.tipo;
     if (m.tipo === 'Enlace') body.url_destino = f.url.trim();
     if (m.tipo === 'WhatsApp') { body.mensaje = f.mensaje; body.telefono_whatsapp = f.telefono; }
-    if (m.tipo === 'Enlaces') body.datos = { titulo: f.titulo, enlaces: f.enlaces };
+    // Las filas de enlace totalmente vacías se ignoran: los enlaces son opcionales
+    const conContenido = (lista) => (lista || []).filter(e => (e.etiqueta || '').trim() || (e.url || '').trim());
+    if (m.tipo === 'Enlaces') body.datos = { titulo: f.titulo, enlaces: conContenido(f.enlaces) };
     if (m.tipo === 'Texto') body.datos = { titulo: f.titulo, items: f.items, nota: f.nota };
     if (m.tipo === 'Ruleta') {
       body.datos = {
-        titulo: f.titulo, periodo_dias: f.periodo_dias, enlaces: f.enlaces,
+        titulo: f.titulo, periodo_dias: f.periodo_dias, validez: f.validez, enlaces: conContenido(f.enlaces),
         premios: f.premios.map(p => ({ ...p, probabilidad: Number(p.probabilidad), tope_dia: p.es_premio && p.tope_dia !== '' ? Number(p.tope_dia) : null }))
       };
     }
@@ -357,11 +363,11 @@ const QRS = (() => {
         <div><h2 class="font-bold text-lg">Participantes de la ruleta</h2>
           <p class="text-xs text-slate-400">Han aceptado recibir promociones. Úsalos solo para lo que aceptaron.</p></div>
         <div class="flex gap-2">
-          <input id="buscar-part" oninput="QRS.pintarParticipantes()" placeholder="Buscar nombre, móvil o código" class="border border-slate-200 rounded-lg px-3 py-2 text-sm w-56">
+          <input id="buscar-part" oninput="QRS.pintarParticipantes()" placeholder="Buscar nombre, WhatsApp o código" class="border border-slate-200 rounded-lg px-3 py-2 text-sm w-56">
           <button onclick="QRS.exportar()" class="text-sm font-semibold bg-green-50 text-green-700 hover:bg-green-100 px-4 py-2 rounded-lg whitespace-nowrap">📥 Exportar CSV</button>
         </div></div>
       <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-slate-500 text-left"><tr>
-        <th class="px-4 py-3 font-medium">Fecha</th><th class="px-4 py-3 font-medium">Nombre</th><th class="px-4 py-3 font-medium">Móvil</th>
+        <th class="px-4 py-3 font-medium">Fecha</th><th class="px-4 py-3 font-medium">Nombre</th><th class="px-4 py-3 font-medium">WhatsApp</th>
         <th class="px-4 py-3 font-medium">Resultado</th><th class="px-4 py-3 font-medium">Código</th><th class="px-4 py-3 font-medium">Estado</th><th></th>
       </tr></thead><tbody id="tabla-part" class="divide-y divide-slate-100"></tbody></table></div></div>`;
     pintarParticipantes();
@@ -396,7 +402,7 @@ const QRS = (() => {
   }
   function exportar() {
     if (!participantes.length) return toast('No hay participantes', 'error');
-    const filas = [['Nombre', 'Apellido', 'Móvil', 'Resultado', 'Código', 'Estado', 'Fecha', 'Acepta promociones']]
+    const filas = [['Nombre', 'Apellido', 'WhatsApp', 'Resultado', 'Código', 'Estado', 'Fecha', 'Acepta promociones']]
       .concat(participantes.map(p => [p.nombre, p.apellido || '', p.telefono, p.origen === 'Aviso' ? 'Quiere avisos' : p.premio, p.codigo || '', p.estado || '', formatFecha(p.fecha), p.acepta_promos ? 'Sí' : 'No']));
     const csv = '\ufeff' + filas.map(f => f.map(celda).join(';')).join('\r\n');
     const a = document.createElement('a');

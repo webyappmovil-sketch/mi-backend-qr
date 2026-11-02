@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { ConfiguracionQR, Escaneo } from '../models/index.js';
 import { cargarQR, MENSAJES_BLOQUEO } from '../services/qrAcceso.js';
 import { validarUrlDestino } from '../services/ruleta.js';
+import { debeContarEscaneo } from '../services/escaneos.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,23 +38,26 @@ router.get('/:id_qr', async (req, res) => {
       return res.status(bloqueo === 'pendiente' ? 403 : 503).send(htmlPage(titulo, msg, color, fondo));
     }
 
-    // Contador atómico + registro de escaneo (analíticas; no bloquea la respuesta)
-    await ConfiguracionQR.increment('contador_escaneos', { by: 1, where: { id: qr.id } });
-    const planActual = negocio.plan_actual;
-    Escaneo.create({
-      qr_id: qr.id,
-      negocio_id: negocio.id,
-      user_agent: (req.headers['user-agent'] || '').slice(0, 255),
-      scanned_at: new Date()
-    })
-      .then(() => {
-        if (planActual === 'Pro' || planActual === 'Business') {
-          import('../services/alertasEscaneo.js')
-            .then(m => m.evaluarPicoEscaneos(negocio.id, planActual))
-            .catch(() => {});
-        }
+    // Contador atómico + registro de escaneo (analíticas; no bloquea la respuesta).
+    // Robots, precargas y recargas rápidas del mismo dispositivo no se cuentan.
+    if (debeContarEscaneo(req, qr.id)) {
+      await ConfiguracionQR.increment('contador_escaneos', { by: 1, where: { id: qr.id } });
+      const planActual = negocio.plan_actual;
+      Escaneo.create({
+        qr_id: qr.id,
+        negocio_id: negocio.id,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 255),
+        scanned_at: new Date()
       })
-      .catch(err => console.error('[Escaneo] Error guardando:', err.message));
+        .then(() => {
+          if (planActual === 'Pro' || planActual === 'Business') {
+            import('../services/alertasEscaneo.js')
+              .then(m => m.evaluarPicoEscaneos(negocio.id, planActual))
+              .catch(() => {});
+          }
+        })
+        .catch(err => console.error('[Escaneo] Error guardando:', err.message));
+    }
 
     switch (qr.tipo_destino) {
       case 'Enlace': {

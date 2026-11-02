@@ -5,11 +5,13 @@
  * GET   /api/admin/pedidos
  * PATCH /api/admin/pedidos/:id/estado
  * GET   /api/admin/metricas
+ * GET   /api/admin/pagos        cobros reales recibidos por Stripe
  */
 
 import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth.js';
-import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, Escaneo, Vendedor } from '../../models/index.js';
+import { Negocio, PedidoImpresion, ConfiguracionQR, ClienteCapturado, Escaneo, Vendedor, Pago } from '../../models/index.js';
+import { inicioDiaMadrid, TZ } from '../../services/planes.js';
 import { Op } from 'sequelize';
 
 const router = Router();
@@ -320,4 +322,44 @@ router.delete('/vendedores/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+/**
+ * GET /api/admin/pagos
+ * Cobros reales (suscripciones, renovaciones e impresiones) con quién pagó y su vendedor.
+ */
+router.get('/pagos', async (req, res) => {
+  try {
+    const filas = await Pago.findAll({
+      order: [['created_at', 'DESC']],
+      limit: 2000,
+      include: [{ model: Negocio, as: 'negocio', attributes: ['id', 'nombre_empresa', 'email', 'telefono_whatsapp', 'plan_actual'],
+        include: [{ model: Vendedor, as: 'vendedor', attributes: ['nombre', 'codigo'], required: false }] }]
+    });
+
+    // Inicio del mes actual en hora de Madrid
+    const ahora = new Date();
+    const ymd = ahora.toLocaleDateString('sv-SE', { timeZone: TZ });
+    const inicioMes = inicioDiaMadrid(new Date(`${ymd.slice(0, 8)}01T12:00:00Z`));
+
+    const resumen = { total_centimos: 0, mes_centimos: 0, num_pagos: filas.length, por_tipo: { Suscripcion: 0, Renovacion: 0, Impresion: 0 } };
+    const pagos = filas.map(p => {
+      const c = Number(p.importe_centimos) || 0;
+      resumen.total_centimos += c;
+      if (new Date(p.created_at) >= inicioMes) resumen.mes_centimos += c;
+      resumen.por_tipo[p.tipo] = (resumen.por_tipo[p.tipo] || 0) + c;
+      const v = p.negocio?.vendedor;
+      return {
+        id: p.id, fecha: p.created_at, tipo: p.tipo, plan: p.plan, material: p.material,
+        importe_centimos: c, moneda: p.moneda,
+        negocio: p.negocio?.nombre_empresa || '(negocio eliminado)', negocio_email: p.negocio?.email || null,
+        pagador_nombre: p.pagador_nombre, pagador_email: p.pagador_email, pagador_telefono: p.pagador_telefono,
+        vendedor: v ? `${v.nombre} (${v.codigo})` : null
+      };
+    });
+    res.json({ resumen, pagos });
+  } catch (error) {
+    console.error('[Admin pagos]', error);
+    res.status(500).json({ error: 'No se pudieron cargar los pagos' });
+  }
+});
+
 export default router;

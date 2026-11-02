@@ -83,7 +83,7 @@
             <tbody id="tabla-clientes" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
-        <p id="clientes-vacio" class="hidden p-8 text-center text-slate-400 text-sm">Aún no hay clientes capturados.</p>
+        <p id="clientes-vacio" class="hidden p-8 text-center text-slate-400 text-sm">Aquí aparecerán los contactos que escriban a tu WhatsApp cuando se conecte el bot (próximamente). Quien rellena la ruleta está arriba, en «Participantes».</p>
       </div>
     </section>
 
@@ -91,16 +91,17 @@
     <section id="tab-metricas" class="tab-content hidden">
       <div class="grid sm:grid-cols-3 gap-4 mb-6">
         <div class="bg-white rounded-2xl border border-slate-200 p-5">
-          <p class="text-sm text-slate-500">Total de escaneos</p>
+          <p class="text-sm text-slate-500">Escaneos hoy</p>
           <p id="metric-escaneos" class="text-3xl font-extrabold mt-1">0</p>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 p-5">
-          <p class="text-sm text-slate-500">En el periodo</p>
+          <p class="text-sm text-slate-500">Escaneos este mes</p>
           <p id="metric-periodo" class="text-3xl font-extrabold mt-1">0</p>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 p-5">
           <p class="text-sm text-slate-500">Clientes capturados</p>
           <p id="metric-clientes" class="text-3xl font-extrabold mt-1">0</p>
+          <p class="text-xs text-slate-400 mt-1">Personas que rellenaron el formulario</p>
         </div>
       </div>
       <div class="flex gap-2 mb-4">
@@ -372,8 +373,8 @@
           : 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600';
 
         const data = await API.request('/api/negocio/metricas?periodo=' + periodo);
-        document.getElementById('metric-escaneos').textContent = data.total_escaneos;
-        document.getElementById('metric-periodo').textContent = data.total_periodo ?? 0;
+        document.getElementById('metric-escaneos').textContent = data.escaneos_hoy ?? 0;
+        document.getElementById('metric-periodo').textContent = data.escaneos_mes ?? 0;
         document.getElementById('metric-clientes').textContent = data.total_clientes;
 
         const labelsDia = (data.por_dia || []).map(d => d.label);

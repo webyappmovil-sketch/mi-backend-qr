@@ -54,6 +54,7 @@
       <button class="tab-btn active flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold" data-tab="negocios" onclick="cambiarTab('negocios')">🏢 Negocios</button>
       <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="pedidos" onclick="cambiarTab('pedidos')">🖨️ Pedidos de Impresión</button>
           <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="vendedores" onclick="cambiarTab('vendedores')">Vendedores</button>
+      <button class="tab-btn flex-shrink-0 px-4 py-2 rounded-lg border-2 border-transparent text-sm font-semibold text-slate-500" data-tab="pagos" onclick="cambiarTab('pagos')">💰 Pagos</button>
     </div>
 
     <section id="tab-negocios" class="tab-content">
@@ -127,6 +128,34 @@
       <div id="grid-pedidos" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       <p id="pedidos-vacio" class="hidden text-center text-slate-400 py-12 text-sm">No hay pedidos pendientes.</p>
     </section>
+    <section id="tab-pagos" class="tab-content hidden">
+      <div class="grid sm:grid-cols-3 gap-4 mb-5">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5"><p class="text-sm text-slate-500">Cobrado en total</p><p id="p-total" class="text-3xl font-extrabold mt-1">0,00 €</p></div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5"><p class="text-sm text-slate-500">Cobrado este mes</p><p id="p-mes" class="text-3xl font-extrabold mt-1 text-green-700">0,00 €</p></div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-5"><p class="text-sm text-slate-500">Pagos registrados</p><p id="p-num" class="text-3xl font-extrabold mt-1">0</p><p id="p-desglose" class="text-xs text-slate-400 mt-1"></p></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100">
+          <div>
+            <h2 class="font-bold text-lg">Pagos recibidos</h2>
+            <p class="text-xs text-slate-400">Dinero realmente cobrado por Stripe. Los pagos de suscripción anteriores a esta función no están aquí: consúltalos en Stripe.</p>
+          </div>
+          <div class="flex gap-2">
+            <input id="buscar-pagos" oninput="pintarPagos()" placeholder="Buscar negocio, email o contacto" class="border border-slate-200 rounded-lg px-3 py-2 text-sm w-60">
+            <button onclick="exportarPagos()" class="text-sm font-semibold bg-green-50 text-green-700 hover:bg-green-100 px-4 py-2 rounded-lg whitespace-nowrap">📥 Exportar CSV</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-left"><tr>
+              <th class="px-4 py-3 font-medium">Fecha</th><th class="px-4 py-3 font-medium">Negocio</th><th class="px-4 py-3 font-medium">Concepto</th>
+              <th class="px-4 py-3 font-medium text-right">Importe</th><th class="px-4 py-3 font-medium">Contacto</th><th class="px-4 py-3 font-medium">Vendedor</th>
+            </tr></thead>
+            <tbody id="tabla-pagos" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="modal-qr" class="fixed inset-0 bg-black/40 z-50 hidden items-center justify-center p-4">
@@ -153,6 +182,60 @@
       document.querySelector(`[data-tab="${id}"]`).classList.add('active');
       if (id === 'pedidos') cargarPedidos();
             if (id === 'vendedores') cargarVendedores();
+      if (id === 'pagos') cargarPagos();
+    }
+
+    /* ───────── Pagos ───────── */
+    let listaPagos = [];
+    const escP = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const euros = c => (Number(c || 0) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    const conceptoPago = p => p.tipo === 'Impresion' ? 'Impresión ' + (p.material || '')
+      : (p.tipo === 'Renovacion' ? 'Renovación ' : 'Suscripción ') + 'plan ' + (p.plan || '');
+    const fechaPago = iso => new Date(iso).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'short', timeStyle: 'short' });
+
+    async function cargarPagos() {
+      try {
+        const d = await API.request('/api/admin/pagos');
+        listaPagos = d.pagos || [];
+        const r = d.resumen || {};
+        document.getElementById('p-total').textContent = euros(r.total_centimos);
+        document.getElementById('p-mes').textContent = euros(r.mes_centimos);
+        document.getElementById('p-num').textContent = r.num_pagos || 0;
+        const t = r.por_tipo || {};
+        document.getElementById('p-desglose').textContent =
+          `Suscripciones ${euros(t.Suscripcion)} · Renovaciones ${euros(t.Renovacion)} · Impresiones ${euros(t.Impresion)}`;
+        pintarPagos();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function pintarPagos() {
+      const q = (document.getElementById('buscar-pagos').value || '').toLowerCase().trim();
+      const filas = listaPagos.filter(p => !q || [p.negocio, p.negocio_email, p.pagador_nombre, p.pagador_email, p.pagador_telefono, conceptoPago(p), p.vendedor].join(' ').toLowerCase().includes(q));
+      document.getElementById('tabla-pagos').innerHTML = filas.map(p => `<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 text-slate-500 whitespace-nowrap">${escP(fechaPago(p.fecha))}</td>
+        <td class="px-4 py-3"><p class="font-medium">${escP(p.negocio)}</p><p class="text-xs text-slate-400">${escP(p.pagador_email || p.negocio_email || '')}</p></td>
+        <td class="px-4 py-3">${escP(conceptoPago(p))}</td>
+        <td class="px-4 py-3 text-right font-semibold whitespace-nowrap">${escP(euros(p.importe_centimos))}</td>
+        <td class="px-4 py-3 text-slate-600">${escP(p.pagador_nombre || '—')}${p.pagador_telefono ? '<p class="text-xs text-slate-400">' + escP(p.pagador_telefono) + '</p>' : ''}</td>
+        <td class="px-4 py-3 text-slate-600">${escP(p.vendedor || 'Directo')}</td>
+      </tr>`).join('') || '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">Aún no hay pagos registrados.</td></tr>';
+    }
+
+    // CSV seguro: comillas escapadas y sin fórmulas ejecutables al abrir en Excel
+    function celdaCsv(v) {
+      let s = String(v ?? '');
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    function exportarPagos() {
+      if (!listaPagos.length) return toast('No hay pagos', 'error');
+      const filas = [['Fecha', 'Negocio', 'Email', 'Concepto', 'Importe (EUR)', 'Contacto', 'Teléfono', 'Vendedor']].concat(
+        listaPagos.map(p => [fechaPago(p.fecha), p.negocio, p.pagador_email || p.negocio_email || '', conceptoPago(p),
+          (p.importe_centimos / 100).toFixed(2).replace('.', ','), p.pagador_nombre || '', p.pagador_telefono || '', p.vendedor || 'Directo']));
+      const csv = '\ufeff' + filas.map(f => f.map(celdaCsv).join(';')).join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = 'pagos.csv'; a.click();
     }
 
     async function cargarMetricas() {

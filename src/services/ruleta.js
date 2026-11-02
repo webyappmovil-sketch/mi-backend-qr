@@ -41,6 +41,16 @@ export function normalizarMovil(raw) {
   return null;
 }
 
+/** Explica por qué un número no vale (para decírselo al cliente) */
+export function motivoMovilInvalido(raw) {
+  let d = String(raw || '').replace(/[\s\-().]/g, '');
+  if (d.startsWith('+')) d = d.slice(1);
+  if (d.startsWith('0034')) d = d.slice(4);
+  if (d.startsWith('34') && d.length === 11) d = d.slice(2);
+  if (/^[89]\d{8}$/.test(d)) return 'Ese parece un teléfono fijo (empieza por 8 o 9). Escribe tu número de WhatsApp: es un móvil y empieza por 6 o 7.';
+  return 'Escribe tu número de WhatsApp: 9 dígitos que empiecen por 6 o 7 (sin el +34).';
+}
+
 function limpiarTexto(v, max) {
   return String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, max);
 }
@@ -62,9 +72,11 @@ export function validarUrlDestino(raw) {
 
 export function validarEnlaces(lista, max = MAX_ENLACES) {
   if (!Array.isArray(lista)) return { error: 'Los enlaces deben ser una lista' };
-  if (lista.length > max) return { error: `Máximo ${max} enlaces` };
+  // Las filas totalmente vacías se ignoran: los enlaces son opcionales
+  const llenas = lista.filter(e => String(e?.etiqueta ?? '').trim() || String(e?.url ?? '').trim());
+  if (llenas.length > max) return { error: `Máximo ${max} enlaces` };
   const out = [];
-  for (const e of lista) {
+  for (const e of llenas) {
     const etiqueta = limpiarTexto(e?.etiqueta, 40);
     const url = urlSegura(e?.url);
     if (!etiqueta) return { error: 'Cada enlace necesita un nombre' };
@@ -110,6 +122,7 @@ export function datosRuletaPorDefecto() {
       { texto: TEXTO_SIN_PREMIO, color: COLOR_SIN_PREMIO, probabilidad: 45, es_premio: false, tope_dia: null }
     ],
     periodo_dias: 7,
+    validez: 'dia',
     enlaces: []
   };
 }
@@ -146,9 +159,11 @@ export function validarDatosRuleta(d) {
   if (!premios.some(p => p.es_premio)) return { error: 'Debe haber al menos un premio' };
 
   const periodo_dias = [7, 30].includes(Number(d?.periodo_dias)) ? Number(d.periodo_dias) : 7;
+  // 'dia' = el premio vale hasta las 23:59 del día en que se gana · 'hora' = hay que canjearlo en la siguiente hora
+  const validez = d?.validez === 'hora' ? 'hora' : 'dia';
   const r = validarEnlaces(d?.enlaces || [], MAX_ENLACES);
   if (r.error) return r;
-  return { datos: { titulo, premios, periodo_dias, enlaces: r.enlaces } };
+  return { datos: { titulo, premios, periodo_dias, validez, enlaces: r.enlaces } };
 }
 
 /* ───────────────────── Estado de los premios hoy ───────────────────── */
@@ -238,7 +253,7 @@ function validarPersona(body, { exigirApellido }) {
   if (!reNombre.test(nombre)) throw new ErrorJuego(400, 'Escribe tu nombre.');
   if (exigirApellido && !reNombre.test(apellido)) throw new ErrorJuego(400, 'Escribe tu apellido.');
   const telefono = normalizarMovil(body?.telefono);
-  if (!telefono) throw new ErrorJuego(400, 'Escribe un móvil español de 9 dígitos.');
+  if (!telefono) throw new ErrorJuego(400, motivoMovilInvalido(body?.telefono));
   if (body?.consentimiento !== true) throw new ErrorJuego(400, 'Marca la casilla para poder participar.');
   return { nombre, apellido: apellido || null, telefono };
 }
@@ -285,7 +300,8 @@ export function jugar({ qr, negocio, body, ahora = new Date() }) {
       const casilla = casillas[indice];
       const gana = casilla.es_premio;
       const codigo = gana ? await generarCodigo(negocio.nombre_empresa, negocio.id, t) : null;
-      const validoHasta = gana ? inicioDiaSiguienteMadrid(ahora) : null;
+      const validez = datos.validez === 'hora' ? 'hora' : 'dia';
+      const validoHasta = gana ? (validez === 'hora' ? new Date(ahora.getTime() + 60 * 60 * 1000) : inicioDiaSiguienteMadrid(ahora)) : null;
 
       await Participacion.create({
         negocio_id: negocio.id, qr_id: qr.id, origen: 'Ruleta',
@@ -302,6 +318,7 @@ export function jugar({ qr, negocio, body, ahora = new Date() }) {
         indice,
         premio: { texto: casilla.texto, color: casilla.color },
         codigo,
+        validez,
         valido_hasta: validoHasta ? validoHasta.toISOString() : null
       };
     })

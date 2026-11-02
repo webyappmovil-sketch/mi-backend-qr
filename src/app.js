@@ -7,6 +7,7 @@ import { sequelize } from './models/index.js';
 import redirectRouter from './routes/redirect.js';
 import publicoRouter from './routes/publico.js';
 import { iniciarAvisosPrueba } from './services/pruebaGratuita.js';
+import { importarPagosAntiguos } from './services/pagos.js';
 import { readFileSync } from 'fs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -150,6 +151,9 @@ async function start() {
 
     app.listen(PORT, () => {
       iniciarAvisosPrueba();
+      importarPagosAntiguos()
+        .then(n => { if (n) console.log(`[Pagos] ${n} pedido(s) de impresión antiguos importados al registro de pagos`); })
+        .catch(e => console.error('[Pagos] No se pudo importar el histórico:', e.message));
       console.log(`\n🚀 Servidor escuchando en http://localhost:${PORT}`);
       console.log(`🔗 Redirección:       GET  /r/:id_qr`);
       console.log(`🔐 Auth:              POST /api/auth/login | /registro`);

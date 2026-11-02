@@ -79,33 +79,45 @@ function mostrar(...nodos) {
 }
 
 /* ───────────── Ruleta ───────────── */
+/* Colores de la paleta del dueño → versión más viva para destacar sobre fondo negro */
+const VIVOS = { '#7F77DD': '#8B5CF6', '#1D9E75': '#13C27A', '#D85A30': '#FF6A2B', '#EF9F27': '#FFC107', '#D4537E': '#FF3D8B', '#378ADD': '#2D8CFF', '#888780': '#9AA3AF' };
+const vivo = c => VIVOS[c] || c;
+const TEXTO_OSCURO = new Set(['#FFC107']);
+
 function dibujarRueda(casillas) {
-  const NS = 'http://www.w3.org/2000/svg', CX = 150, CY = 174, R = 138, A = 360 / casillas.length;
+  const NS = 'http://www.w3.org/2000/svg', CX = 150, CY = 174, R = 136, A = 360 / casillas.length;
   const pt = (a, r) => [CX + r * Math.sin(a * Math.PI / 180), CY - r * Math.cos(a * Math.PI / 180)];
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 300 320'); svg.setAttribute('class', 'w-full max-w-[300px] mx-auto block');
-  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Ruleta de premios');
-  const puntero = document.createElementNS(NS, 'polygon');
-  puntero.setAttribute('points', '136,2 164,2 150,34'); puntero.setAttribute('fill', '#0f172a');
-  const g = document.createElementNS(NS, 'g'); g.id = 'rueda';
+  const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const svg = mk('svg', { viewBox: '0 0 300 320', class: 'w-full max-w-[300px] mx-auto block', role: 'img', 'aria-label': 'Ruleta de premios' });
+
+  // Borde dorado con lucecitas
+  svg.appendChild(mk('circle', { cx: CX, cy: CY, r: 144, fill: '#1a1205', stroke: '#FFC107', 'stroke-width': 7 }));
+  for (let i = 0; i < 18; i++) {
+    const [x, y] = pt(i * 20, 144);
+    svg.appendChild(mk('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 2.6, fill: i % 2 ? '#FFF3B0' : '#FFFFFF' }));
+  }
+
+  const g = mk('g', { id: 'rueda' });
   g.style.transition = 'transform 4.2s cubic-bezier(.17,.67,.12,1)';
   casillas.forEach((c, i) => {
-    const s = pt(i * A, R), e = pt((i + 1) * A, R);
-    const p = document.createElementNS(NS, 'path');
-    p.setAttribute('d', `M${CX} ${CY} L${s[0].toFixed(1)} ${s[1].toFixed(1)} A${R} ${R} 0 0 1 ${e[0].toFixed(1)} ${e[1].toFixed(1)} Z`);
-    p.setAttribute('fill', c.color); p.setAttribute('stroke', '#fff'); p.setAttribute('stroke-width', '2');
-    g.appendChild(p);
-    const t = document.createElementNS(NS, 'text');
-    t.setAttribute('x', CX); t.setAttribute('y', CY - R * 0.66); t.setAttribute('text-anchor', 'middle');
-    t.setAttribute('font-size', '12'); t.setAttribute('font-weight', '600');
-    t.setAttribute('fill', c.color === '#EF9F27' ? '#412402' : '#fff');
-    t.setAttribute('transform', `rotate(${i * A + A / 2} ${CX} ${CY})`);
+    const color = vivo(c.color), s0 = pt(i * A, R), e0 = pt((i + 1) * A, R);
+    g.appendChild(mk('path', {
+      d: `M${CX} ${CY} L${s0[0].toFixed(1)} ${s0[1].toFixed(1)} A${R} ${R} 0 0 1 ${e0[0].toFixed(1)} ${e0[1].toFixed(1)} Z`,
+      fill: color, stroke: '#000', 'stroke-width': 2.5
+    }));
+    const oscuro = TEXTO_OSCURO.has(color);
+    const t = mk('text', {
+      x: CX, y: CY - R * 0.66, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 800,
+      fill: oscuro ? '#2b1a00' : '#fff', transform: `rotate(${i * A + A / 2} ${CX} ${CY})`
+    });
+    if (!oscuro) { t.setAttribute('stroke', 'rgba(0,0,0,.45)'); t.setAttribute('stroke-width', '2.5'); t.setAttribute('paint-order', 'stroke'); }
     t.textContent = c.texto; g.appendChild(t);
   });
-  const hub = document.createElementNS(NS, 'circle');
-  hub.setAttribute('cx', CX); hub.setAttribute('cy', CY); hub.setAttribute('r', 20);
-  hub.setAttribute('fill', '#fff'); hub.setAttribute('stroke', '#cbd5e1');
-  svg.append(puntero, g, hub);
+  svg.appendChild(g);
+
+  // Puntero amarillo con borde blanco (visible sobre el negro) y centro de la ruleta
+  svg.appendChild(mk('polygon', { points: '135,2 165,2 150,36', fill: '#FFD400', stroke: '#fff', 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+  svg.appendChild(mk('circle', { cx: CX, cy: CY, r: 20, fill: '#fff', stroke: '#FFC107', 'stroke-width': 4 }));
   return svg;
 }
 
@@ -190,7 +202,11 @@ function formularioDatos({ pedirApellido, textoBoton, onEnviar }) {
 
 function pantallaRuleta() {
   const R = D.ruleta, cont = el('div');
-  cont.appendChild(dibujarRueda(R.casillas));
+  const panel = el('div', 'rounded-2xl px-2 pt-2 pb-3'); panel.id = 'panel-rueda';
+  panel.style.backgroundColor = '#000'; // negro de base (y respaldo en navegadores antiguos)
+  panel.style.backgroundImage = 'radial-gradient(circle at 50% 45%, #1c1c24 0%, #000 72%)';
+  panel.appendChild(dibujarRueda(R.casillas));
+  cont.appendChild(panel);
   const zona = el('div', 'mt-3');
   cont.appendChild(zona);
   const menu = el('div'); cont.appendChild(menu);
@@ -210,8 +226,14 @@ function pantallaRuleta() {
       cod.appendChild(el('p', 'text-xs text-slate-500', 'Tu código'));
       cod.appendChild(el('p', 'text-2xl font-bold tracking-wider font-mono', r.codigo));
       caja.appendChild(cod);
-      caja.appendChild(el('p', 'text-sm mt-3', 'Válido solo hoy, hasta las 23:59.'));
+      if (r.validez === 'hora') {
+        const hasta = new Date(r.valido_hasta).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
+        caja.appendChild(el('p', 'text-sm font-semibold mt-3', `Canjéalo ahora mismo: tienes hasta las ${hasta} (1 hora).`));
+      } else {
+        caja.appendChild(el('p', 'text-sm mt-3', 'Válido solo hoy, hasta las 23:59.'));
+      }
       caja.appendChild(el('p', 'text-sm', 'Enséñalo en el local para canjearlo.'));
+      caja.appendChild(el('p', 'text-xs mt-2 opacity-75', 'Promoción sujeta a disponibilidad, horario y aforo del local.'));
     }
     return caja;
   };
@@ -225,7 +247,7 @@ function pantallaRuleta() {
   // Premio ganado hoy en este mismo móvil: se vuelve a mostrar si cierra y reabre la página
   const previo = leerLocal('premio-' + ID);
   if (previo && new Date(previo.valido_hasta) > new Date()) {
-    finalizar(pantallaPremio({ resultado: 'gana', premio: previo.premio, codigo: previo.codigo }));
+    finalizar(pantallaPremio({ resultado: 'gana', premio: previo.premio, codigo: previo.codigo, validez: previo.validez, valido_hasta: previo.valido_hasta }));
     return;
   }
 
@@ -272,7 +294,7 @@ function pantallaRuleta() {
         }
         btn.textContent = 'Girando…';
         await girarHasta(r.indice, R.casillas.length);
-        if (r.resultado === 'gana') guardarLocal('premio-' + ID, { premio: r.premio, codigo: r.codigo, valido_hasta: r.valido_hasta });
+        if (r.resultado === 'gana') guardarLocal('premio-' + ID, { premio: r.premio, codigo: r.codigo, validez: r.validez, valido_hasta: r.valido_hasta });
         finalizar(pantallaPremio(r));
       }
     }));

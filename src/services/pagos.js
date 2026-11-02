@@ -3,7 +3,8 @@
  * tras eventos de Stripe o Revolut.
  */
 
-import { Negocio, Pago, Vendedor } from '../models/index.js';
+import { Negocio, Pago, Vendedor, PedidoImpresion } from '../models/index.js';
+import { Op } from 'sequelize';
 import { notificarAdmin, formatoEuros } from './notificaciones.js';
 
 /**
@@ -171,4 +172,36 @@ export async function registrarPagoFactura({ invoice, negocio, plan }) {
   });
   if (nuevo) await avisarPago({ negocio, pago }).catch(e => console.error('[Aviso] Error:', e.message));
   return { pago, nuevo };
+}
+
+
+/**
+ * Importa a la tabla de pagos los pedidos de impresión cobrados ANTES de existir el registro de pagos
+ * (los pedidos no guardaban el importe: se toma el precio del material). Es idempotente y no avisa a nadie.
+ * Un pedido se salta si ya hay un pago de impresión de ese negocio cerca de su fecha (los nuevos pagos
+ * crean el pedido y el pago a la vez).
+ */
+export async function importarPagosAntiguos() {
+  const pedidos = await PedidoImpresion.findAll({ order: [['created_at', 'ASC']] });
+  let importados = 0;
+  for (const ped of pedidos) {
+    const fecha = new Date(ped.created_at);
+    const cerca = await Pago.findOne({
+      where: {
+        negocio_id: ped.negocio_id, tipo: 'Impresion',
+        created_at: { [Op.between]: [new Date(fecha.getTime() - 36 * 3600 * 1000), new Date(fecha.getTime() + 36 * 3600 * 1000)] }
+      }
+    });
+    if (cerca) continue;
+    const material = ped.tipo_material === 'Vinilo' ? 'Vinilo' : 'Papel';
+    const { nuevo } = await registrarPago({
+      negocio_id: ped.negocio_id, tipo: 'Impresion', material,
+      importe_centimos: PRECIOS_CENTIMOS[material], moneda: 'eur',
+      referencia: `pedido-${ped.id}`,
+      pagador_nombre: ped.nombre_contacto || null, pagador_telefono: ped.telefono_contacto || null,
+      created_at: fecha
+    });
+    if (nuevo) importados++;
+  }
+  return importados;
 }

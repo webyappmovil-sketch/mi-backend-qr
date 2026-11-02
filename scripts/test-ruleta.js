@@ -354,6 +354,79 @@ try {
   r = await api('/health');
   check('/health informa de la versión', /^\d+\.\d+\.\d+$/.test(r.json.version), JSON.stringify(r.json));
 
+  titulo('Panel admin: pestaña Pagos');
+  const { SuperAdmin, PedidoImpresion } = await import('../src/models/index.js');
+  const { importarPagosAntiguos } = await import('../src/services/pagos.js');
+  await SuperAdmin.create({ email: 'admin@test.es', password_hash: 'clave-admin-123456', nombre: 'Admin' });
+  r = await api('/api/auth/login', { method: 'POST', body: { email: 'admin@test.es', password: 'clave-admin-123456' } });
+  const adminToken = r.json?.token;
+  check('El admin puede entrar con su correo de login', !!adminToken && r.json.user.role === 'admin', JSON.stringify(r.json));
+  r = await api('/api/admin/pagos');
+  check('Sin sesión no se ven los pagos (401)', r.status === 401);
+  r = await api('/api/admin/pagos', { token: B.token });
+  check('Un negocio NO puede ver los pagos (403)', r.status === 403);
+  r = await api('/api/admin/pagos', { token: adminToken });
+  check('El admin ve los pagos', r.status === 200 && Array.isArray(r.json.pagos));
+  const res1 = r.json.resumen;
+  check('Total cobrado = suma real de los 4 pagos (89,97 €)', res1.total_centimos === 1999 + 1999 + 2000 + 2999 && res1.num_pagos === 4, JSON.stringify(res1));
+  check('Lo cobrado hoy cuenta como "este mes"', res1.mes_centimos === res1.total_centimos);
+  check('Desglose por tipo correcto', res1.por_tipo.Suscripcion === 4998 && res1.por_tipo.Renovacion === 1999 && res1.por_tipo.Impresion === 2000, JSON.stringify(res1.por_tipo));
+  const pImp = r.json.pagos.find(x => x.tipo === 'Impresion');
+  check('Cada pago trae negocio, concepto y datos de contacto', pImp.negocio === 'Bar Mejora' && pImp.material === 'Vinilo' && pImp.pagador_nombre === 'María Gil' && pImp.pagador_telefono === '611222333');
+  check('Los más recientes salen primero', new Date(r.json.pagos[0].fecha) >= new Date(r.json.pagos[r.json.pagos.length - 1].fecha));
+
+  titulo('Importación de pedidos de impresión antiguos (sin duplicar)');
+  const pagosAntes = await Pago.count();
+  const ped = await PedidoImpresion.create({ negocio_id: B.id, tipo_material: 'Papel', direccion_envio_completa: 'Calle Vieja 1, Madrid', nombre_contacto: 'Cliente Antiguo', telefono_contacto: '600123123', estado: 'Pendiente' });
+  await sequelize.query(`UPDATE ${PedidoImpresion.getTableName()} SET created_at = ? WHERE id = ?`, { replacements: [fechaSql(Date.now() - 40 * DIA), ped.id] });
+  const n1 = await importarPagosAntiguos();
+  check('Importa SOLO el pedido antiguo (los de pagos nuevos ya tienen su pago)', n1 === 1 && (await Pago.count()) === pagosAntes + 1, `(importados ${n1})`);
+  const pAnt = await Pago.findOne({ where: { referencia: `pedido-${ped.id}` } });
+  check('Lo importado vale 10,00 € (Papel), con su contacto y SU fecha original', pAnt.importe_centimos === 1000 && pAnt.pagador_nombre === 'Cliente Antiguo' && Math.abs(new Date(pAnt.created_at) - (Date.now() - 40 * DIA)) < 3600 * 1000, `(${pAnt.created_at})`);
+  check('Repetir la importación no duplica nada', (await importarPagosAntiguos()) === 0 && (await Pago.count()) === pagosAntes + 1);
+  r = await api('/api/admin/pagos', { token: adminToken });
+  check('El pago antiguo suma al total pero NO al mes en curso', r.json.resumen.total_centimos === res1.total_centimos + 1000 && r.json.resumen.mes_centimos === res1.mes_centimos);
+
+  titulo('Canje en una hora, enlaces vacíos y métricas del día/mes');
+  const { validarDatosRuleta, datosRuletaPorDefecto, validarDatosEnlaces } = await import('../src/services/ruleta.js');
+  const { Escaneo } = await import('../src/models/index.js');
+  check('Por defecto el premio vale "solo el día en que se gana"', validarDatosRuleta(datosRuletaPorDefecto()).datos.validez === 'dia');
+  await api(`/api/negocio/qrs/${qrEnlaces}`, { method: 'DELETE', token: B.token });
+  const premiosHora = [{ texto: 'Café gratis', probabilidad: 100, es_premio: true, tope_dia: 50 }, ...Array.from({ length: 5 }, (_, i) => ({ texto: `Nada ${i}`, probabilidad: 0, es_premio: false }))];
+  r = await api('/api/negocio/qrs', { method: 'POST', token: B.token, body: { tipo_destino: 'Ruleta', nombre: 'Canje hora', datos: { premios: premiosHora, validez: 'hora', enlaces: [{ etiqueta: '', url: '', icono: 'web' }] } } });
+  check('Se puede guardar la ruleta con una fila de enlace vacía (los enlaces son opcionales)', r.status === 201 && r.json.qr.datos.enlaces.length === 0, JSON.stringify(r.json));
+  check('La opción "canjear en una hora" se guarda', r.json.qr.datos.validez === 'hora');
+  const qrHora = r.json.qr.id;
+  r = await api(`/api/negocio/qrs/${qrHora}`, { method: 'PUT', token: B.token, body: { nombre: 'Canje hora', datos: { premios: premiosHora, validez: 'hora', enlaces: [{ etiqueta: 'Carta', url: '' }] } } });
+  check('Una fila a medias (nombre sin dirección) sí avisa', r.status === 400 && /dirección válida/.test(r.json.error), r.json?.error);
+  r = await api(`/api/negocio/qrs/${qrHora}`, { method: 'PUT', token: B.token, body: { nombre: 'Canje hora', datos: { premios: premiosHora, validez: 'hora', enlaces: [{ etiqueta: '', url: 'https://x.test' }] } } });
+  check('…y una dirección sin nombre también', r.status === 400 && /nombre/.test(r.json.error), r.json?.error);
+  check('La página de enlaces SÍ necesita al menos un enlace', /al menos un enlace/.test(validarDatosEnlaces({ titulo: 'x', enlaces: [{ etiqueta: '', url: '' }] }).error || ''));
+
+  r = await api(`/api/publico/qr/${qrHora}/jugar`, { method: 'POST', body: { nombre: 'Rosa', apellido: 'Gil', telefono: '622333444', consentimiento: true } });
+  const minutos = (new Date(r.json.valido_hasta) - Date.now()) / 60000;
+  check('Gana y el plazo es de una hora (no hasta fin de día)', r.json.resultado === 'gana' && r.json.validez === 'hora' && minutos > 58 && minutos <= 60.5, `(${minutos.toFixed(1)} min, ${JSON.stringify(r.json)})`);
+  r = await api('/api/negocio/participaciones', { token: B.token });
+  const filaHora = r.json.participaciones.find(x => x.telefono === '34622333444');
+  check('Dentro de la hora el premio figura como Pendiente', filaHora.estado === 'Pendiente');
+  await sequelize.query('UPDATE participaciones SET valido_hasta = ? WHERE id = ?', { replacements: [fechaSql(Date.now() - 60000), filaHora.id] });
+  r = await api('/api/negocio/participaciones', { token: B.token });
+  check('Pasada la hora figura como Caducado', r.json.participaciones.find(x => x.id === filaHora.id).estado === 'Caducado');
+  r = await api(`/api/negocio/participaciones/${filaHora.id}/canjear`, { method: 'PUT', token: B.token });
+  check('…y ya no se puede canjear', r.status === 409);
+
+  r = await api('/api/negocio/metricas', { token: B.token });
+  const hoy0 = r.json.escaneos_hoy, mes0 = r.json.escaneos_mes;
+  const qrAny = (await ConfiguracionQR.findOne({ where: { negocio_id: B.id } })).id;
+  await Escaneo.create({ qr_id: qrAny, negocio_id: B.id, user_agent: 't', scanned_at: new Date(Date.now() - 40 * DIA) });
+  r = await api('/api/negocio/metricas', { token: B.token });
+  check('Un escaneo de hace 40 días no cuenta ni en "hoy" ni en "este mes"', r.json.escaneos_hoy === hoy0 && r.json.escaneos_mes === mes0);
+  await Escaneo.create({ qr_id: qrAny, negocio_id: B.id, user_agent: 't', scanned_at: new Date() });
+  r = await api('/api/negocio/metricas', { token: B.token });
+  check('Un escaneo de ahora suma 1 en "hoy" y 1 en "este mes"', r.json.escaneos_hoy === hoy0 + 1 && r.json.escaneos_mes === mes0 + 1);
+  const telsB2 = new Set((await Participacion.findAll({ where: { negocio_id: B.id }, attributes: ['telefono'], raw: true })).map(x => x.telefono));
+  check('"Clientes capturados" = personas que rellenaron el formulario', r.json.total_clientes === telsB2.size && telsB2.size >= 3, `(${r.json.total_clientes} vs ${telsB2.size})`);
+
   /* ───────────── Avisos de prueba ───────────── */
   titulo('Avisos de fin de prueba (día 45, 55 y 60)');
   const casos = [['Prueba D40', 20, null], ['Prueba D45', 14, 'd15'], ['Prueba D55', 4, 'd5'], ['Prueba D61', -1, 'd0']];

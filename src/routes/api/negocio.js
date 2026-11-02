@@ -9,7 +9,7 @@ import { Router } from 'express';
 import { Op } from 'sequelize';
 import { requireAuth, requireNegocio } from '../../middleware/auth.js';
 import { Negocio, ConfiguracionQR, ClienteCapturado, Escaneo, Participacion } from '../../models/index.js';
-import { reglasPlan, tipoPermitido, estadoPrueba, TIPOS_QR, DIAS_PRUEBA } from '../../services/planes.js';
+import { reglasPlan, tipoPermitido, estadoPrueba, TIPOS_QR, DIAS_PRUEBA, inicioDiaMadrid, TZ } from '../../services/planes.js';
 import {
   validarUrlDestino, validarDatosRuleta, validarDatosEnlaces, validarDatosTexto,
   datosRuletaPorDefecto, estadoPremio
@@ -212,12 +212,28 @@ router.get('/metricas', async (req, res) => {
     const negocioId = req.user.id;
     const dias = req.query.periodo === '30d' ? 30 : 7;
 
-    const qr = await ConfiguracionQR.findOne({
-      where: { negocio_id: negocioId, activo: true }
-    });
-    const totalClientes = await ClienteCapturado.count({
-      where: { negocio_id: negocioId }
-    });
+    // Escaneos de hoy y del mes en curso (hora de Madrid), contados desde los escaneos realmente registrados
+    const ahoraM = new Date();
+    const inicioHoy = inicioDiaMadrid(ahoraM);
+    const ymdM = ahoraM.toLocaleDateString('sv-SE', { timeZone: TZ });
+    const inicioMes = inicioDiaMadrid(new Date(`${ymdM.slice(0, 8)}01T12:00:00Z`));
+    const [escaneosHoy, escaneosMes] = await Promise.all([
+      Escaneo.count({ where: { negocio_id: negocioId, scanned_at: { [Op.gte]: inicioHoy } } }),
+      Escaneo.count({ where: { negocio_id: negocioId, scanned_at: { [Op.gte]: inicioMes } } })
+    ]);
+
+    // Escaneos de toda la vida: suma de los contadores de TODOS los QR del negocio
+    const todosQR = await ConfiguracionQR.findAll({ where: { negocio_id: negocioId }, attributes: ['contador_escaneos'], raw: true });
+    const totalEscaneos = todosQR.reduce((s, q) => s + (Number(q.contador_escaneos) || 0), 0);
+
+    // Clientes capturados: quien rellena el formulario de la ruleta + contactos del bot de WhatsApp.
+    // Se cuenta cada móvil una sola vez aunque aparezca en varios sitios.
+    const [deRuleta, deBot] = await Promise.all([
+      Participacion.findAll({ where: { negocio_id: negocioId }, attributes: ['telefono'], raw: true }),
+      ClienteCapturado.findAll({ where: { negocio_id: negocioId }, attributes: ['telefono_cliente'], raw: true })
+    ]);
+    const telefonos = new Set([...deRuleta.map(p => p.telefono), ...deBot.map(c => c.telefono_cliente)].filter(Boolean));
+    const totalClientes = telefonos.size;
 
     // Desde medianoche de hace (dias-1) en Madrid → aprox. UTC
     const hoyMadrid = madridHoyFecha();
@@ -271,7 +287,9 @@ router.get('/metricas', async (req, res) => {
     const escaneos_semana = por_dia.slice(-7).map(d => d.total);
 
     res.json({
-      total_escaneos: qr?.contador_escaneos || 0,
+      escaneos_hoy: escaneosHoy,
+      escaneos_mes: escaneosMes,
+      total_escaneos: totalEscaneos,
       total_clientes: totalClientes,
       total_periodo: totalPeriodo,
       periodo_dias: dias,
